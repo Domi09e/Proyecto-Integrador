@@ -1,6 +1,6 @@
-### MERN Stack CRUD with JWT
+### BNPL with JWT
 
-This is a web application project using React, with a Nodejs Backend using Express and Mongodb as Database (MERN Stack)
+This is a web application project using React, with a Nodejs Backend using Express and SQL as Database (BNPL)
 
 ### Installation with docker-compose (Recommended)
 
@@ -12,11 +12,11 @@ npm run dev
 ### Deployment
 
 ```sh
-git clone https://github.com/FaztWeb/mern-tasks-auth
-cd mern-tasks-auth
+git clone git@github.com:Domi09e/Proyecto-Integrador.git
+cd client
 npm i
 npm run build
 npm start
 ```
 
-> You need to have a Mongodb database running
+> You need to have a SQL database running
