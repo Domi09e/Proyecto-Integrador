@@ -1,74 +1,59 @@
-import { verifyAccessToken } from "../libs/jwt.js";
+// middlewares/requireAdmin.middleware.js
+import jwt from "jsonwebtoken";
+import { TOKEN_SECRET } from "../config.js";
 import db from "../models/index.js";
 
 const { Usuario } = db;
 const COOKIE_NAME = "admin_token";
 
 /**
- * Middleware que valida si el usuario autenticado es administrador.
- * - Lee el token del header Authorization: Bearer ... o de la cookie HttpOnly.
- * - Verifica el JWT.
- * - Comprueba que el usuario exista y esté activo.
- * - Asigna req.user = { id, aud, rol }.
+ * Autenticación de administradores basada en cookie httpOnly "admin_token"
+ * Igual al patrón de requireAuth (usuarios), pero consultando la tabla Usuario (admins).
  */
-export const requireAdmin = async (req, res, next) => {
-  try {
-    // Obtener token de Header o Cookie
-    const authHeader = req.headers.authorization || "";
-    const bearerToken = authHeader.startsWith("Bearer ")
-      ? authHeader.slice(7).trim()
-      : null;
+export const requireAdmin = (req, res, next) => {
+  const token = req.cookies?.[COOKIE_NAME];
 
-    const cookieToken = req.cookies?.[COOKIE_NAME] || null;
-    const token = bearerToken || cookieToken;
-
-    if (!token) {
-      return res.status(401).json({ message: "No token, authorization denied" });
-    }
-
-    // Verificar el token
-    const decoded = verifyAccessToken(token); // { id, aud, rol }
-    if (!decoded || decoded.aud !== "admin") {
-      return res.status(403).json({ message: "Invalid audience for admin" });
-    }
-
-    // Buscar el usuario en la base de datos
-    const admin = await Usuario.findByPk(decoded.id, {
-      attributes: ["id", "rol", "activo"],
-    });
-
-    if (!admin) {
-      return res.status(404).json({ message: "Usuario admin no encontrado" });
-    }
-
-    if (!admin.activo) {
-      return res.status(403).json({ message: "Usuario administrador inactivo" });
-    }
-
-    // Guardar datos en la request
-    req.user = {
-      id: admin.id,
-      aud: "admin",
-      rol: decoded.rol || admin.rol,
-    };
-
-    return next();
-  } catch (error) {
-    console.error("[requireAdmin]", error.message);
-    return res.status(403).json({ message: "Invalid or expired token" });
+  if (!token) {
+    return res.status(401).json({ message: "No token, authorization denied" });
   }
+
+  jwt.verify(token, TOKEN_SECRET, async (err, decoded) => {
+    if (err) {
+      return res.status(403).json({ message: "Invalid token" });
+    }
+
+    try {
+      // Verificar existencia real del admin en la BD
+      const admin = await Usuario.findByPk(decoded.id);
+      if (!admin) {
+        return res.status(404).json({ message: "Usuario admin no encontrado" });
+      }
+
+      if (admin.activo === false) {
+        return res.status(403).json({ message: "Usuario administrador inactivo" });
+      }
+
+      // Adjuntamos el admin al request (igual que en requireAuth)
+      req.user = admin;
+      next();
+    } catch (error) {
+      return res.status(500).json({ message: error.message });
+    }
+  });
 };
 
 /**
- * Middleware para verificar un rol específico.
- * Ejemplo: router.get("/admin/finanzas", requireAdmin, requireRol("finanzas"), ...)
+ * Middleware de autorización por rol (para rutas específicas).
+ * Uso: router.get("/finanzas", requireAdmin, requireRol("finanzas"), handler)
  */
 export const requireRol = (rolNecesario) => (req, res, next) => {
-  if (req.user?.aud !== "admin") {
-    return res.status(403).json({ message: "Solo administradores" });
+  // Debe existir req.user (lo pone requireAdmin)
+  if (!req.user) {
+    return res.status(401).json({ message: "No autenticado" });
   }
 
-  if (!req.user?.rol || req.user.rol !== rolNecesario) {
+  // Verifica el campo rol del admin (ajusta si tu columna se llama distinto)
+  if (!req.user.rol || req.user.rol !== rolNecesario) {
     return res.status(403).json({ message: "Rol insuficiente" });
   }
 

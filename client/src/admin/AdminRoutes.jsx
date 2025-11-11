@@ -1,14 +1,13 @@
 // client/src/admin/AdminRoutes.jsx
 import { Routes, Route, Navigate, useLocation } from "react-router-dom";
-import AdminAuthProvider, { useAdminAuth } from "./adminAuth.context";
+import AdminAuthProvider, { useAdminAuth } from "./context/adminAuth.context";
 import AdminLayout from "./AdminLayout";
 import AdminLoginPage from "./Pages/AdminLoginPage";
 import AdminRegisterPage from "./Pages/AdminRegisterPage";
-import AdminDashboard from "./Pages/AdminDashboard";
-import TiendasPage from "./Pages/TiendasPage";
-import UsuariosPage from "./Pages/UsuariosPage";
+import AdminStores from "./Shop/TiendasPage";
+import ClientPage from "./Pages/UsuariosPage";
 import PagosPage from "./Pages/PagosPage";
-import ConfigPage from "./Pages/ConfigPage";
+import ConfigPage from "./settings/ConfigPage";
 
 function AdminRoute({ children }){
   const { isAuthenticated, loading } = useAdminAuth();
@@ -28,13 +27,15 @@ export default function AdminRoutes(){
 
         {/* Zona protegida */}
         <Route path="" element={<AdminRoute><AdminLayout /></AdminRoute>}>
-          <Route index element={<AdminDashboard />} />
-          <Route path="tiendas" element={<TiendasPage />} />
-          <Route path="usuarios" element={<UsuariosPage />} />
+          {/* ⬇️ si entras a /admin, te manda a /admin/tiendas */}
+          <Route path="clientes" element={<ClientPage />} />
           <Route path="pagos" element={<PagosPage />} />
-          <Route path="config" element={<ConfigPage />} />
         </Route>
+
+        <Route path="tiendas" element={<AdminStores />} />
+        <Route path="config" element={<ConfigPage />} />
       </Routes>
     </AdminAuthProvider>
   );
 }
+

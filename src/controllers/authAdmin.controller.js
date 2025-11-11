@@ -1,64 +1,47 @@
+// controllers/adminAuth.controller.js
 import db from '../models/index.js';
 import bcrypt from 'bcryptjs';
 import { createAccessToken } from '../libs/jwt.js';
-import { Op } from 'sequelize';
 
 const { Usuario } = db;
 
-const isProd = process.env.NODE_ENV === 'production';
-const cookieOpts = {
-  httpOnly: true,
-  secure: isProd,
-  sameSite: isProd ? 'none' : 'lax',
-  path: '/',
-  maxAge: 1000 * 60 * 60 * 24, // 1 día
-};
-
-const normEmail = (e) => String(e || '').trim().toLowerCase();
-
-/**
- * POST /api/admin/auth/register
- * Body esperado (solo columnas existentes):
- * { nombre, apellido?, email, password, telefono?, rol? }
- */
+// REGISTER (admin)
 export const registerAdmin = async (req, res) => {
   try {
-    let { nombre, apellido, email, password, telefono, rol } = req.body || {};
+    const { nombre, apellido, email, password, telefono, rol } = req.body || {};
 
-    if (!nombre || !email || !password) {
+    // Validaciones mínimas
+    if (!email || !password || !nombre) {
       return res.status(400).json({ message: ['nombre, email y password son requeridos'] });
     }
 
-    email = normEmail(email);
-
-    // Verifica email / teléfono si viene
-    const whereOr = [{ email }];
-    if (telefono) whereOr.push({ telefono });
-
-    const existing = await Usuario.findOne({
-      where: { [Op.or]: whereOr },
-      attributes: ['id', 'email', 'telefono'],
-    });
-
+    // ¿Ya existe por email?
+    const existing = await Usuario.findOne({ where: { email } });
     if (existing) {
-      if (existing.email === email) return res.status(400).json({ message: ['El email ya está en uso'] });
-      if (telefono && existing.telefono === telefono) return res.status(400).json({ message: ['El teléfono ya está en uso'] });
+      return res.status(400).json({ message: ['The email is already in use'] });
     }
 
-    const password_hash = await bcrypt.hash(password, 10);
+    const passwordHash = await bcrypt.hash(password, 10);
 
     const admin = await Usuario.create({
-      nombre: String(nombre).trim(),
-      apellido: apellido ? String(apellido).trim() : null,
+      nombre,
+      apellido,
       email,
-      telefono: telefono || null,
-      password_hash,
-      rol: rol || 'admin_general', // default de tu tabla
-      activo: true,                // default de tu tabla
+      telefono,
+      password_hash: passwordHash,
+      rol: rol || 'admin_general',
+      activo: true,
     });
 
-    const token = await createAccessToken({ id: admin.id, aud: 'admin', rol: admin.rol });
-    res.cookie('admin_token', token, cookieOpts);
+    const tokenPayload = { id: admin.id };
+    const token = await createAccessToken(tokenPayload);
+
+    // === Cookie igual que tu controller de clientes (misma estrategia) ===
+    res.cookie('admin_token', token, {
+      httpOnly: process.env.NODE_ENV !== 'development',
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+    });
 
     return res.status(201).json({
       id: admin.id,
@@ -69,36 +52,37 @@ export const registerAdmin = async (req, res) => {
     });
   } catch (error) {
     console.error('[registerAdmin]', error);
-    return res.status(500).json({ message: 'Error al registrar admin' });
+    return res.status(500).json({ message: error.message || 'Server error' });
   }
 };
 
-/**
- * POST /api/admin/auth/login
- * Body: { email, password }
- */
+// LOGIN (admin)
 export const loginAdmin = async (req, res) => {
   try {
-    let { email, password } = req.body || {};
-    if (!email || !password) {
-      return res.status(400).json({ message: ['email y password son requeridos'] });
+    const { email, password } = req.body || {};
+    const admin = await Usuario.findOne({ where: { email } });
+
+    if (!admin) {
+      return res.status(400).json({ message: ['The email does not exist'] });
+    }
+    if (!admin.activo) {
+      return res.status(403).json({ message: 'Usuario administrador inactivo' });
     }
 
-    email = normEmail(email);
+    const isMatch = await bcrypt.compare(password, admin.password_hash || '');
+    if (!isMatch) {
+      return res.status(400).json({ message: ['The password is incorrect'] });
+    }
 
-    const admin = await Usuario.findOne({
-      where: { email },
-      attributes: ['id', 'nombre', 'apellido', 'email', 'telefono', 'password_hash', 'rol', 'activo'],
+    const tokenPayload = { id: admin.id };
+    const token = await createAccessToken(tokenPayload);
+
+    // === Cookie igual que tu controller de clientes ===
+    res.cookie('admin_token', token, {
+      httpOnly: process.env.NODE_ENV !== 'development',
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
     });
-
-    if (!admin) return res.status(400).json({ message: ['El email no existe'] });
-    if (!admin.activo) return res.status(403).json({ message: 'Usuario administrador inactivo' });
-
-    const ok = await bcrypt.compare(password, admin.password_hash || '');
-    if (!ok) return res.status(400).json({ message: ['La contraseña es incorrecta'] });
-
-    const token = await createAccessToken({ id: admin.id, aud: 'admin', rol: admin.rol });
-    res.cookie('admin_token', token, cookieOpts);
 
     return res.json({
       id: admin.id,
@@ -109,29 +93,32 @@ export const loginAdmin = async (req, res) => {
     });
   } catch (error) {
     console.error('[loginAdmin]', error);
-    return res.status(500).json({ message: 'Error al iniciar sesión admin' });
+    return res.status(500).json({ message: error.message || 'Server error' });
   }
 };
 
-/**
- * GET /api/admin/auth/verify  (protegido con requireAdmin)
- */
-export const verifyAdmin = async (req, res) => {
-  try {
-    const admin = await Usuario.findByPk(req.user.id, {
-      attributes: ['id', 'nombre', 'apellido', 'email', 'telefono', 'rol', 'activo', 'createdAt', 'updatedAt'],
-    });
-    if (!admin) return res.status(401).json({ message: 'Unauthorized' });
-    return res.json(admin);
-  } catch {
-    return res.status(401).json({ message: 'Unauthorized' });
-  }
+// VERIFY (admin) — igual estructura
+// Nota: req.user debe venir de un middleware requireAdmin que verifique el JWT de la cookie 'admin_token'
+export const verifyAdminToken = async (req, res) => {
+  const admin = await Usuario.findByPk(req.user.id);
+  if (!admin) return res.status(401).json({ message: 'Unauthorized' });
+
+  return res.json({
+    id: admin.id,
+    nombre: admin.nombre,
+    apellido: admin.apellido,
+    email: admin.email,
+    rol: admin.rol,
+  });
 };
 
-/**
- * POST /api/admin/auth/logout
- */
+// LOGOUT (admin) — igual estrategia de limpiar cookie
 export const logoutAdmin = (_req, res) => {
-  res.clearCookie('admin_token', cookieOpts);
+  res.cookie('admin_token', '', {
+    expires: new Date(0),
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+  });
   return res.sendStatus(200);
 };

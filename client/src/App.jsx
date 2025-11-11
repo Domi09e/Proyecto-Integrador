@@ -11,20 +11,18 @@ import Pagos from "./pages/Payments";
 import Tienda from "./pages/Shops";
 import Soporte from "./pages/Support";
 import AdminRoutes from "./admin/AdminRoutes.jsx";
-import AdminStores from "./admin/Pages/TiendasPage.jsx";
-import StoreForm from "./admin/components/AggTienda.jsx";
+import AdminStores from "./admin/Shop/TiendasPage.jsx";
+import AggTienda from "./admin/Shop/AggTienda.jsx";
 
 function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
         <Routes>
-        {/* Ramas del ADMIN (sin afectar el Navbar del cliente) */}
           <Route path="/admin/*" element={<AdminRoutes />} />
-          <Route path="/tiendas" element={<AdminStores />} />
-          <Route path="/AggTienda" element={<StoreForm />} />
+          <Route path="/AggTienda" element={<AggTienda />} />
           
-
+          {/* Rutas protegidas */}
           <Route element={<ProtectedRoute />}>
             <Route path="/dashboard" element={<h1>Dashboard</h1>} />
             <Route path="/cartera" element={<Cartera />} />

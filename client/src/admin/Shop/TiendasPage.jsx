@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { fetchAdminStores } from "../../api/stores.js";
-import { useAdminAuth } from "../adminAuth.context";
+import { useAdminAuth } from "../context/adminAuth.context.jsx";
 
 export default function AdminStores() {
   const nav = useNavigate();
@@ -54,7 +54,7 @@ export default function AdminStores() {
     role === "admin_general" ||
     role === "admin_tiendas" ||
     role === "super_admin";
-  const canDelete = (role) => role === "super_admin";
+  const canDelete = (role) => role === "admin_general" || role === "super_admin";
 
   const onDeleteClick = (store) => {
     setDeletingId(store.id);

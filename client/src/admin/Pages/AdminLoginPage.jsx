@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
-import { useAdminAuth } from "../adminAuth.context";
+import { useAdminAuth } from "../context/adminAuth.context";
 
 export default function AdminLoginPage() {
   const navigate = useNavigate();

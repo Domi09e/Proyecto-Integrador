@@ -3,7 +3,7 @@ import { Router } from "express";
 import {
   registerAdmin,
   loginAdmin,
-  verifyAdmin,
+  verifyAdminToken as verifyAdmin,
   logoutAdmin,
 } from "../controllers/authAdmin.controller.js";
 import {
