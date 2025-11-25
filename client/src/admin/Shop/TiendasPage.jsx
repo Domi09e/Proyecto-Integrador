@@ -1,12 +1,18 @@
 // src/admin/pages/AdminStores.jsx
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { fetchAdminStores } from "../../api/stores.js";
+import { fetchAdminStores /*, deactivateStore */ } from "../../api/stores.js";
 import { useAdminAuth } from "../context/adminAuth.context.jsx";
+
+const BRAND = {
+  primary: "#0d9488",   // teal-600
+  secondary: "#0f766e", // teal-700
+  accent: "#10b981",    // emerald-500
+};
 
 export default function AdminStores() {
   const nav = useNavigate();
-  const { user } = useAdminAuth(); // user.rol (admin_general | admin_tiendas | soporte | finanzas | super_admin)
+  const { user } = useAdminAuth(); // admin | admin_general | admin_tiendas | soporte | finanzas | super_admin
   const [stores, setStores] = useState([]);
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(true);
@@ -38,7 +44,7 @@ export default function AdminStores() {
     if (!t) return stores;
     return stores.filter(
       (s) =>
-        (s.nombre|| "").toLowerCase().includes(t) ||
+        (s.nombre || "").toLowerCase().includes(t) ||
         (s.direccion || "").toLowerCase().includes(t) ||
         (s.telefono || "").toLowerCase().includes(t) ||
         (s.rnc || "").toLowerCase().includes(t)
@@ -46,14 +52,11 @@ export default function AdminStores() {
   }, [q, stores]);
 
   const total = stores.length;
-  const activeCount = stores.filter((s) => String(s.estado) == "activa").length;
+  const activeCount = stores.filter((s) => String(s.estado) === "activa").length;
   const oldestName = useMemo(() => stores[0]?.nombre ?? "N/A", [stores]); // si tu API ya trae ordenado por antigüedad
 
   const canEdit = (role) =>
-    role === "admin" ||
-    role === "admin_general" ||
-    role === "admin_tiendas" ||
-    role === "super_admin";
+    role === "admin" || role === "admin_general" || role === "admin_tiendas" || role === "super_admin";
   const canDelete = (role) => role === "admin_general" || role === "super_admin";
 
   const onDeleteClick = (store) => {
@@ -63,7 +66,7 @@ export default function AdminStores() {
 
   const confirmDelete = async () => {
     try {
-      await deactivateStore(deletingId, { password: pwd }); // o sin password si es DELETE
+      // await deactivateStore(deletingId, { password: pwd }); // habilita cuando tengas la API
       setPassNeeded(false);
       setPwd("");
       setDeletingId(null);
@@ -74,66 +77,69 @@ export default function AdminStores() {
   };
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-6">
+    <div className="min-h-screen bg-slate-900 text-slate-100">
       {/* Header / Volver */}
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl md:text-3xl font-bold text-gray-900 flex items-center gap-2">
-          <StoreIcon className="h-7 w-7 text-indigo-600" />
-          Gestión de Tiendas
-        </h1>
-        <button
-          onClick={() => nav("/admin")}
-          className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-        >
-          Volver
-        </button>
+      <div className="sticky top-0 z-10 bg-gradient-to-r from-teal-600 to-emerald-600 text-white shadow">
+        <div className="mx-auto max-w-7xl px-4 py-4 flex items-center justify-between">
+          <h1 className="text-xl md:text-2xl font-bold flex items-center gap-2">
+            <StoreIcon className="h-7 w-7 text-white/90" />
+            Gestión de Tiendas
+          </h1>
+          <button
+            onClick={() => nav("/admin")}
+            className="rounded-xl border border-white/20 bg-white/10 backdrop-blur px-3 py-2 text-sm font-medium hover:bg-white/15"
+          >
+            Volver
+          </button>
+        </div>
       </div>
 
-      {/* Stats */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 mb-6">
-        <StatCard
-          color="indigo"
-          icon={<StoreIcon className="h-6 w-6" />}
-          label="Tiendas Registradas"
-          value={total}
-        />
-        <StatCard
-          color="green"
-          icon={<CheckIcon className="h-6 w-6" />}
-          label="Tiendas Activas"
-          value={activeCount}
-        />
-        <StatCard
-          color="amber"
-          icon={<StarIcon className="h-6 w-6" />}
-          label="Tienda más antigua"
-          value={oldestName}
-        />
-      </div>
+      <div className="mx-auto max-w-7xl px-4 py-6">
+        {/* Stats */}
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 mb-6">
+          <StatCard
+            color="teal"
+            icon={<StoreIcon className="h-5 w-5" />}
+            label="Tiendas Registradas"
+            value={total}
+          />
+          <StatCard
+            color="emerald"
+            icon={<CheckIcon className="h-5 w-5" />}
+            label="Tiendas Activas"
+            value={activeCount}
+          />
+          <StatCard
+            color="indigo"
+            icon={<StarIcon className="h-5 w-5" />}
+            label="Tienda más antigua"
+            value={oldestName}
+          />
+        </div>
 
-      {/* Card listado */}
-      <div className="rounded-2xl border border-gray-200 overflow-hidden shadow-sm bg-white">
-        <div className="bg-gradient-to-r from-indigo-600 to-blue-500 px-4 py-4">
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <h2 className="text-white font-semibold flex items-center gap-2">
-              <ListIcon className="h-5 w-5" />
-              Listado de Tiendas
-            </h2>
-            <div className="relative">
-              <input
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                className="w-full md:w-80 rounded-full border border-transparent bg-white/90 px-4 py-2.5 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
-                placeholder="Buscar tienda…"
-              />
-              <SearchIcon className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-indigo-600" />
+        {/* Card listado */}
+        <div className="rounded-2xl border border-slate-700/60 overflow-hidden shadow-xl bg-slate-800">
+          <div className="bg-gradient-to-r from-teal-600 to-emerald-600 px-4 py-4">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <h2 className="text-white font-semibold flex items-center gap-2">
+                <ListIcon className="h-5 w-5" />
+                Listado de Tiendas
+              </h2>
+              <div className="relative">
+                <input
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  className="w-full md:w-80 rounded-full border border-teal-500/30 bg-slate-900/70 px-4 py-2.5 pr-10 text-sm text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500/40"
+                  placeholder="Buscar tienda…"
+                />
+                <SearchIcon className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-emerald-300" />
+              </div>
             </div>
           </div>
-        </div>
 
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm">
-            <thead className="bg-gray-50 text-gray-600 uppercase text-xs">
+            <thead className="bg-slate-800/80 text-slate-300 uppercase text-xs border-b border-slate-700/60">
               <tr>
                 <th className="px-4 py-3 text-left">Logo</th>
                 <th className="px-4 py-3 text-left">Nombre</th>
@@ -143,41 +149,41 @@ export default function AdminStores() {
                 <th className="px-4 py-3 text-right">Acciones</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100 text-gray-800">
+            <tbody className="divide-y divide-slate-700/60 text-slate-200">
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-6 text-gray-500">
+                  <td colSpan={6} className="px-4 py-6 text-slate-400">
                     Cargando…
                   </td>
                 </tr>
               ) : filtered.length ? (
                 filtered.map((s) => (
-                  <tr key={s.id} className="hover:bg-gray-50">
+                  <tr key={s.id} className="hover:bg-slate-700/40">
                     <td className="px-4 py-3">
-                      <div className="h-12 w-12 overflow-hidden rounded-lg border border-gray-200 bg-gray-100">
+                      <div className="h-12 w-12 overflow-hidden rounded-lg border border-slate-700 bg-slate-700/40">
                         {s.logo_url ? (
                           <img src={s.logo_url} alt={s.nombre} className="h-full w-full object-cover" />
                         ) : (
-                          <div className="grid h-full w-full place-items-center text-gray-400 text-xs">
+                          <div className="grid h-full w-full place-items-center text-slate-400 text-xs">
                             Sin imagen
                           </div>
                         )}
                       </div>
                     </td>
                     <td className="px-4 py-3">
-                      <div className="font-semibold">{s.nombre}</div>
+                      <div className="font-semibold text-slate-100">{s.nombre}</div>
                     </td>
-                    <td className="px-4 py-3">{s.direccion || "-"}</td>
-                    <td className="px-4 py-3">{s.telefono || "-"}</td>
+                    <td className="px-4 py-3 text-slate-300">{s.direccion || "—"}</td>
+                    <td className="px-4 py-3 text-slate-300">{s.telefono || "—"}</td>
                     <td className="px-4 py-3">
-                      <span className="inline-flex items-center rounded-full bg-blue-500/10 px-2.5 py-1 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-500/20">
+                      <span className="inline-flex items-center rounded-full bg-emerald-500/15 px-2.5 py-1 text-xs font-medium text-emerald-300 ring-1 ring-inset ring-emerald-500/25">
                         {s.rnc || "—"}
                       </span>
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-2">
                         <button
-                          className="rounded-lg bg-indigo-600 px-3 py-1.5 text-white hover:bg-indigo-700"
+                          className="rounded-lg bg-teal-600/90 px-3 py-1.5 text-white hover:bg-teal-500"
                           onClick={() => setDetail(s)}
                           title="Ver"
                         >
@@ -186,7 +192,7 @@ export default function AdminStores() {
 
                         {canEdit(user?.rol) && (
                           <button
-                            className="rounded-lg bg-amber-500 px-3 py-1.5 text-white hover:bg-amber-600"
+                            className="rounded-lg bg-amber-500/90 px-3 py-1.5 text-white hover:bg-amber-400"
                             onClick={() => nav(`/admin/tiendas/${s.id}/edit`)}
                             title="Editar"
                           >
@@ -196,7 +202,7 @@ export default function AdminStores() {
 
                         {canDelete(user?.rol) && (
                           <button
-                            className="rounded-lg bg-rose-600 px-3 py-1.5 text-white hover:bg-rose-700"
+                            className="rounded-lg bg-rose-600/90 px-3 py-1.5 text-white hover:bg-rose-500"
                             onClick={() => onDeleteClick(s)}
                             title="Desactivar"
                           >
@@ -209,7 +215,7 @@ export default function AdminStores() {
                 ))
               ) : (
                 <tr>
-                  <td colSpan={6} className="px-4 py-6 text-gray-500">
+                  <td colSpan={6} className="px-4 py-6 text-slate-400">
                     No se encontraron tiendas.
                   </td>
                 </tr>
@@ -219,70 +225,65 @@ export default function AdminStores() {
         </div>
       </div>
 
-      {/* Botón flotante (crear) */}
-      {(user?.rol === "admin" ||
-        user?.rol === "admin_general" ||
-        user?.rol === "admin_tiendas" ||
-        user?.rol === "super_admin") && (
-        <button
-          onClick={() => nav("/AggTienda")}
-          className="fixed bottom-6 right-6 grid h-14 w-14 place-items-center rounded-full bg-indigo-600 text-white shadow-xl hover:bg-indigo-700"
-          title="Agregar tienda"
-        >
-          <PlusIcon className="h-6 w-6" />
-        </button>
-      )}
+        {/* Botón flotante (crear) */}
+        {(user?.rol === "admin" ||
+          user?.rol === "admin_general" ||
+          user?.rol === "admin_tiendas" ||
+          user?.rol === "super_admin") && (
+          <button
+            onClick={() => nav("/AggTienda")}
+            className="fixed bottom-6 right-6 grid h-14 w-14 place-items-center rounded-full bg-teal-600 text-white shadow-2xl hover:bg-teal-500"
+            title="Agregar tienda"
+          >
+            <PlusIcon className="h-6 w-6" />
+          </button>
+        )}
 
-      {/* Modal Detalles */}
-      {detail && (
-        <DetailsModal store={detail} onClose={() => setDetail(null)} />
-      )}
+        {/* Modal Detalles */}
+        {detail && <DetailsModal store={detail} onClose={() => setDetail(null)} />}
 
-      {/* Modal Confirmación con password (solo si tu backend lo pide) */}
-      {passNeeded && (
-        <PasswordModal
-          onCancel={() => {
-            setPassNeeded(false);
-            setPwd("");
-            setDeletingId(null);
-          }}
-          onConfirm={confirmDelete}
-          pwd={pwd}
-          setPwd={setPwd}
-        />
-      )}
+        {/* Modal Confirmación con password (solo si tu backend lo pide) */}
+        {passNeeded && (
+          <PasswordModal
+            onCancel={() => {
+              setPassNeeded(false);
+              setPwd("");
+              setDeletingId(null);
+            }}
+            onConfirm={confirmDelete}
+            pwd={pwd}
+            setPwd={setPwd}
+          />
+        )}
 
-      {/* Error general */}
-      {!!error && (
-        <div className="mt-4 rounded-xl bg-rose-50 px-4 py-2 text-sm text-rose-700">
-          {String(error)}
-        </div>
-      )}
+        {/* Error general */}
+        {!!error && (
+          <div className="mt-4 rounded-xl border border-rose-700/40 bg-rose-900/30 px-4 py-2 text-sm text-rose-200">
+            {String(error)}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
 /* ---------- Subcomponentes ---------- */
 
-function StatCard({ color = "indigo", icon, label, value }) {
-  const colorMap =
+function StatCard({ color = "teal", icon, label, value }) {
+  const tone =
     {
-      indigo: "text-indigo-600 bg-indigo-50",
-      green: "text-green-600 bg-green-50",
-      amber: "text-amber-600 bg-amber-50",
-    }[color] || "text-indigo-600 bg-indigo-50";
+      teal: "text-teal-300 bg-teal-500/10 ring-teal-500/25",
+      emerald: "text-emerald-300 bg-emerald-500/10 ring-emerald-500/25",
+      indigo: "text-indigo-300 bg-indigo-500/10 ring-indigo-500/25",
+    }[color] || "text-teal-300 bg-teal-500/10 ring-teal-500/25";
 
   return (
-    <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+    <div className="rounded-2xl border border-slate-700/60 bg-slate-800 p-4 shadow-sm">
       <div className="flex items-center gap-3">
-        <div
-          className={`grid h-11 w-11 place-items-center rounded-lg ${colorMap}`}
-        >
-          {icon}
-        </div>
+        <div className={`grid h-11 w-11 place-items-center rounded-lg ${tone} text-base`}>{icon}</div>
         <div>
-          <div className="text-2xl font-extrabold leading-tight">{value}</div>
-          <div className="text-xs text-gray-500">{label}</div>
+          <div className="text-2xl font-extrabold leading-tight text-slate-100">{value}</div>
+          <div className="text-xs text-slate-400">{label}</div>
         </div>
       </div>
     </div>
@@ -295,20 +296,18 @@ function DetailsModal({ store, onClose }) {
       ? store.logo_url
       : `../../../../uploads/${store.logo_url}`
     : "/assets/default_store.png";
+
   return (
-    <div className="fixed inset-0 z-50 bg-black/40">
+    <div className="fixed inset-0 z-50 bg-black/60">
       <div className="absolute inset-0 grid place-items-center p-4">
-        <div className="w-full max-w-md rounded-2xl bg-white shadow-xl">
-          <div className="flex items-center justify-between border-b px-5 py-3">
+        <div className="w-full max-w-md rounded-2xl bg-slate-900 text-slate-100 shadow-2xl border border-slate-700">
+          <div className="flex items-center justify-between border-b border-slate-700 px-5 py-3">
             <div className="flex items-center gap-2 font-semibold">
-              <StoreIcon className="h-5 w-5 text-indigo-600" />
+              <StoreIcon className="h-5 w-5 text-emerald-400" />
               Detalles de Tienda
             </div>
-            <button
-              onClick={onClose}
-              className="rounded-lg p-1.5 hover:bg-gray-100"
-            >
-              <XIcon className="h-5 w-5 text-gray-500" />
+            <button onClick={onClose} className="rounded-lg p-1.5 hover:bg-slate-800">
+              <XIcon className="h-5 w-5 text-slate-400" />
             </button>
           </div>
 
@@ -317,12 +316,12 @@ function DetailsModal({ store, onClose }) {
               <img
                 src={logoSrc}
                 alt={store.name}
-                className="h-24 w-24 rounded-xl border border-gray-200 object-cover"
+                className="h-24 w-24 rounded-xl border border-slate-700 object-cover"
               />
             </div>
 
             <div className="mb-3">
-              <div className="text-xs text-gray-500">Nombre</div>
+              <div className="text-xs text-slate-400">Nombre</div>
               <div className="text-lg font-semibold">{store.nombre}</div>
             </div>
 
@@ -332,17 +331,17 @@ function DetailsModal({ store, onClose }) {
             </div>
 
             <div className="mt-3">
-              <div className="text-xs text-gray-500">RNC</div>
-              <span className="mt-1 inline-flex items-center rounded-full bg-blue-500/10 px-3 py-1 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-500/20">
+              <div className="text-xs text-slate-400">RNC</div>
+              <span className="mt-1 inline-flex items-center rounded-full bg-emerald-500/15 px-3 py-1 text-xs font-medium text-emerald-300 ring-1 ring-inset ring-emerald-500/25">
                 {store.rnc || "—"}
               </span>
             </div>
           </div>
 
-          <div className="flex justify-end gap-2 border-t px-5 py-3">
+          <div className="flex justify-end gap-2 border-t border-slate-700 px-5 py-3">
             <button
               onClick={onClose}
-              className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              className="rounded-lg border border-slate-700 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-slate-800"
             >
               Cerrar
             </button>
@@ -355,20 +354,20 @@ function DetailsModal({ store, onClose }) {
 
 function PasswordModal({ onCancel, onConfirm, pwd, setPwd }) {
   return (
-    <div className="fixed inset-0 z-50 bg-black/40">
+    <div className="fixed inset-0 z-50 bg-black/60">
       <div className="absolute inset-0 grid place-items-center p-4">
-        <div className="w-full max-w-md rounded-2xl bg-white shadow-xl">
-          <div className="border-b px-5 py-3">
-            <div className="text-rose-700 font-semibold flex items-center gap-2">
+        <div className="w-full max-w-md rounded-2xl bg-slate-900 text-slate-100 shadow-2xl border border-slate-700">
+          <div className="border-b border-slate-700 px-5 py-3">
+            <div className="text-rose-300 font-semibold flex items-center gap-2">
               <AlertIcon className="h-5 w-5" /> ¡ADVERTENCIA CRÍTICA!
             </div>
           </div>
 
-          <div className="px-5 py-4 text-sm text-gray-700">
+          <div className="px-5 py-4 text-sm text-slate-200">
             <p>
               Estás a punto de <b>desactivar permanentemente</b> esta tienda.
             </p>
-            <ul className="mt-2 list-disc pl-5">
+            <ul className="mt-2 list-disc pl-5 text-slate-300">
               <li>Productos asociados</li>
               <li>Registros de ventas e inventario</li>
               <li>Reportes históricos</li>
@@ -382,20 +381,20 @@ function PasswordModal({ onCancel, onConfirm, pwd, setPwd }) {
               value={pwd}
               onChange={(e) => setPwd(e.target.value)}
               placeholder="Contraseña"
-              className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-rose-200"
+              className="mt-2 w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-rose-500/40"
             />
           </div>
 
-          <div className="flex justify-end gap-2 border-t px-5 py-3">
+          <div className="flex justify-end gap-2 border-t border-slate-700 px-5 py-3">
             <button
               onClick={onCancel}
-              className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              className="rounded-lg border border-slate-700 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-slate-800"
             >
               Cancelar
             </button>
             <button
               onClick={onConfirm}
-              className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-medium text-white hover:bg-rose-700"
+              className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-medium text-white hover:bg-rose-500"
             >
               Confirmar desactivación
             </button>
@@ -409,8 +408,8 @@ function PasswordModal({ onCancel, onConfirm, pwd, setPwd }) {
 function InfoRow({ label, value }) {
   return (
     <div>
-      <div className="text-xs text-gray-500">{label}</div>
-      <div className="font-medium">{value}</div>
+      <div className="text-xs text-slate-400">{label}</div>
+      <div className="font-medium text-slate-100">{value}</div>
     </div>
   );
 }

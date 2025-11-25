@@ -1,3 +1,4 @@
+// client/src/api/store.js
 import axios from "./axios";
 
 export const normalizeStore = (raw = {}) => ({
@@ -32,7 +33,6 @@ export async function fetchAdminStores() {
 }
 
 export async function createStore(form) {
-  // si NO subes archivo:
   const { data } = await axios.post("/admin/tiendas", toDTO(form));
   return normalizeStore(data);
 }
@@ -40,7 +40,7 @@ export async function createStore(form) {
 export async function createStoreWithFile(form, file) {
   const fd = new FormData();
   Object.entries(toDTO(form)).forEach(([k, v]) => fd.append(k, v ?? ""));
-  if (file) fd.append("logo", file); // el nombre del campo debe coincidir con multer
+  if (file) fd.append("logo", file);
 
   const { data } = await axios.post("/admin/tiendas", fd, {
     headers: { "Content-Type": "multipart/form-data" },
@@ -69,7 +69,11 @@ export async function fetchStoreAudit(id) {
 }
 
 // === PÚBLICO ===
+// 👇 AQUÍ ESTÁ EL CAMBIO IMPORTANTE
 export async function fetchPublicStores() {
-  const { data } = await axios.get("/public/tiendas");
-  return Array.isArray(data) ? data.map(normalizeStore) : [];
+  // Llama a /api/tiendas  (porque baseURL = http://localhost:4000/api)
+  const { data } = await axios.get("/tiendas");
+
+  // Tu backend YA devuelve: [{ id, name, logo, category, ... }]
+  return Array.isArray(data) ? data : [];
 }

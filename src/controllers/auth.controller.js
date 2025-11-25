@@ -1,107 +1,137 @@
+import db from "../models/index.js";
+import bcrypt from "bcryptjs";
+import { createAccessToken } from "../libs/jwt.js";
 
-import db from '../models/index.js';
-import bcrypt from 'bcryptjs';
-import { createAccessToken } from '../libs/jwt.js';
+const { Cliente } = db;   // 👈 asegúrate de tener este modelo definido
 
-const { User } = db;
-
+// POST /api/auth/register-cliente
 export const register = async (req, res) => {
   try {
-    const { nombre, apellido, email, password, telefono, address, birth_date, legal_name } = req.body;
-
-    const userFound = await User.findOne({ where: { email } });
-    if (userFound) {
-      return res.status(400).json({ message: ["The email is already in use"] });
-    }
-
-    const usernameFound = await User.findOne({ where: { username } });
-    if (usernameFound) {
-      return res.status(400).json({ message: ["The username is already in use"] });
-    }
-
-    const passwordHash = await bcrypt.hash(password, 10);
-
-    const newUser = await User.create({
-      username,
+    const {
+      nombre,
+      apellido,
       email,
-      password_hash: passwordHash,
-      phone,
+      password,
+      telefono,
       address,
-      birth_date,
-      legal_name,
+    } = req.body;
+
+    // ¿Email ya usado?
+    const clienteFound = await Cliente.findOne({ where: { email } });
+    if (clienteFound) {
+      return res
+        .status(400)
+        .json({ message: ["El email ya está en uso"] });
+    }
+
+    // Hashear contraseña
+    const password_hash = await bcrypt.hash(password, 10);
+
+    const newCliente = await Cliente.create({
+      nombre,
+      apellido,
+      email,
+      telefono,
+      address,
+      password_hash,
+      poder_credito: 0, 
+      activo: 1,
     });
 
-    const tokenPayload = { id: newUser.id };
+    const tokenPayload = { id: newCliente.id, tipo: "cliente" };
     const token = await createAccessToken(tokenPayload);
 
-    res.cookie('token', token, {
-      httpOnly: process.env.NODE_ENV !== 'development',
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+    res.cookie("token", token, {
+      httpOnly: process.env.NODE_ENV !== "development",
+      secure: process.env.NODE_ENV === "production",
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
     });
 
     res.json({
-      id: newUser.id,
-      username: newUser.username,
-      email: newUser.email,
+      id: newCliente.id,
+      nombre: newCliente.nombre,
+      apellido: newCliente.apellido,
+      email: newCliente.email,
+      telefono: newCliente.telefono,
+      address: newCliente.address,
     });
   } catch (error) {
+    console.error(error);
     res.status(500).json({ message: error.message });
   }
 };
 
+// POST /api/auth/login-cliente
 export const login = async (req, res) => {
   try {
     const { email, password } = req.body;
-    const userFound = await User.findOne({ where: { email } });
 
-    if (!userFound) {
-      return res.status(400).json({ message: ["The email does not exist"] });
+    const clienteFound = await Cliente.findOne({ where: { email } });
+
+    if (!clienteFound) {
+      return res.status(400).json({ message: ["El email no existe"] });
     }
 
-    const isMatch = await bcrypt.compare(password, userFound.password_hash);
+    const isMatch = await bcrypt.compare(
+      password,
+      clienteFound.password_hash
+    );
     if (!isMatch) {
-      return res.status(400).json({ message: ["The password is incorrect"] });
+      return res.status(400).json({ message: ["La contraseña es incorrecta"] });
     }
 
-    const tokenPayload = { id: userFound.id };
+    if (!clienteFound.activo) {
+      return res
+        .status(403)
+        .json({ message: ["Tu cuenta está inactiva, contacta soporte"] });
+    }
+
+    const tokenPayload = { id: clienteFound.id, tipo: "cliente" };
     const token = await createAccessToken(tokenPayload);
 
-    res.cookie('token', token, {
-        httpOnly: process.env.NODE_ENV !== "development",
-        secure: process.env.NODE_ENV === "production",
-        sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+    res.cookie("token", token, {
+      httpOnly: process.env.NODE_ENV !== "development",
+      secure: process.env.NODE_ENV === "production",
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
     });
 
     res.json({
-      id: userFound.id,
-      username: userFound.username,
-      email: userFound.email,
+      id: clienteFound.id,
+      nombre: clienteFound.nombre,
+      apellido: clienteFound.apellido,
+      email: clienteFound.email,
+      telefono: clienteFound.telefono,
+      address: clienteFound.address,
+      poder_credito: clienteFound.poder_credito,
     });
   } catch (error) {
+    console.error(error);
     res.status(500).json({ message: error.message });
   }
 };
 
+// GET /api/auth/verify (para clientes)
 export const verifyToken = async (req, res) => {
-  // req.user es establecido por el middleware requireAuth
-  const userFound = await User.findByPk(req.user.id);
-  if (!userFound) return res.status(401).json({ message: 'Unauthorized' });
+  const clienteFound = await Cliente.findByPk(req.user.id);
+  if (!clienteFound) return res.status(401).json({ message: "Unauthorized" });
 
   return res.json({
-    id: userFound.id,
-    username: userFound.username,
-    email: userFound.email,
+    id: clienteFound.id,
+    nombre: clienteFound.nombre,
+    apellido: clienteFound.apellido,
+    email: clienteFound.email,
+    telefono: clienteFound.telefono,
+    address: clienteFound.address,
+    poder_credito: clienteFound.poder_credito,
   });
 };
 
 export const logout = (req, res) => {
-  res.cookie('token', '', {
+  res.cookie("token", "", {
     expires: new Date(0),
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+    secure: process.env.NODE_ENV === "production",
+    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
   });
   return res.sendStatus(200);
 };
-

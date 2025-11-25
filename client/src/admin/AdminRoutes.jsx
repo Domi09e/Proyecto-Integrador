@@ -5,9 +5,11 @@ import AdminLayout from "./AdminLayout";
 import AdminLoginPage from "./Pages/AdminLoginPage";
 import AdminRegisterPage from "./Pages/AdminRegisterPage";
 import AdminStores from "./Shop/TiendasPage";
-import ClientPage from "./Pages/UsuariosPage";
+import ClientsPage from "./clients/clients";
 import PagosPage from "./Pages/PagosPage";
 import ConfigPage from "./settings/ConfigPage";
+import UserManagement from "./settings/user_managment";
+import UserEditPage from "./settings/UserEdit";
 
 function AdminRoute({ children }){
   const { isAuthenticated, loading } = useAdminAuth();
@@ -28,12 +30,13 @@ export default function AdminRoutes(){
         {/* Zona protegida */}
         <Route path="" element={<AdminRoute><AdminLayout /></AdminRoute>}>
           {/* ⬇️ si entras a /admin, te manda a /admin/tiendas */}
-          <Route path="clientes" element={<ClientPage />} />
-          <Route path="pagos" element={<PagosPage />} />
         </Route>
-
+        <Route path="pagos" element={<PagosPage />} />
         <Route path="tiendas" element={<AdminStores />} />
         <Route path="config" element={<ConfigPage />} />
+        <Route path="clientes" element={<ClientsPage />} />
+        <Route path="config/usuarios" element={<UserManagement />} />
+        <Route path="config/usuarios/:id/edit" element={<UserEditPage />} />
       </Routes>
     </AdminAuthProvider>
   );

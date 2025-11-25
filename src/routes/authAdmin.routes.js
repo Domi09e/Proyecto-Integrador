@@ -31,4 +31,5 @@ r.get("/finanzas", requireAdmin, requireRol("finanzas"), (req, res) =>
   res.json({ ok: true })
 );
 
+
 export default r;

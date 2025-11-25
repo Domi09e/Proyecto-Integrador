@@ -17,21 +17,35 @@ import TiendaModel from "./tienda.model.js";
 import CategoriaModel from "./categoria.model.js";
 import TiendasCategoriasModel from "./tiendas_categorias.model.js";
 import AuditoriaTiendasModel from "./auditoria_tienda.model.js";
+import NotificacionModel from "./notification.model.js";
+import SolicitudTiendaModel from "./SolicitudTienda.model.js";
+import MetodoPagoModel from "./metodo_pago.model.js";
 
 const db = {};
 
 // Instancias de modelos
 db.Cliente = ClienteModel(sequelize, DataTypes);
 db.Usuario = UsuarioModel(sequelize, DataTypes);
-
+db.Notificacion = NotificacionModel(sequelize, Sequelize.DataTypes);
 db.Tienda = TiendaModel(sequelize, DataTypes);
 db.Categoria = CategoriaModel(sequelize, DataTypes);
 db.TiendasCategorias = TiendasCategoriasModel(sequelize, DataTypes);
 db.AuditoriaTiendas = AuditoriaTiendasModel(sequelize, DataTypes);
+db.SolicitudTienda = SolicitudTiendaModel(sequelize, DataTypes);
+db.MetodoPago = MetodoPagoModel(sequelize, DataTypes);
 
 // =========================
 // Asociaciones
 // =========================
+
+db.MetodoPago.belongsTo(db.Cliente, {
+  foreignKey: "cliente_id",
+  as: "cliente",
+});
+db.Cliente.hasMany(db.MetodoPago, {
+  foreignKey: "cliente_id",
+  as: "metodos_pago",
+});
 
 // Tienda <-> Categoria (N:M) a través de Tiendas_Categorias
 db.Tienda.belongsToMany(db.Categoria, {

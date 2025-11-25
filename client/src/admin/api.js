@@ -16,6 +16,8 @@ export const deleteTienda = (id)         => axios.delete(`/admin/tiendas/${id}`)
 export const getUsuarios  = ()           => axios.get("/admin/usuarios");
 export const updateUsuario= (id, payload)=> axios.put(`/admin/usuarios/${id}`, payload);
 
+export const getClientesBNPL = ()           => axios.get("/admin/clients-with-bnpl");
+
 export const getPagos     = ()           => axios.get("/admin/pagos");
 
 export const getSettings  = ()           => axios.get("/admin/settings");

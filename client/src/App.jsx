@@ -2,7 +2,6 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "./context/authContext";
 import { ProtectedRoute } from "./routes";
 import Navbar from "./components/Navbar";
-import HomePage from "./pages/HomePage";
 import RegisterPage from "./pages/RegisterPage";
 import LoginPage from "./pages/LoginPage";
 import Descubrir from "./pages/BNPL";
@@ -11,8 +10,10 @@ import Pagos from "./pages/Payments";
 import Tienda from "./pages/Shops";
 import Soporte from "./pages/Support";
 import AdminRoutes from "./admin/AdminRoutes.jsx";
-import AdminStores from "./admin/Shop/TiendasPage.jsx";
 import AggTienda from "./admin/Shop/AggTienda.jsx";
+import ClientsPage from "./admin/clients/clients.jsx";
+import PartnerRequestPage from "./pages/partnerRequest.jsx";
+import StoreDetailPage from "./pages/StoreDetail.jsx";
 
 function App() {
   return (
@@ -21,6 +22,7 @@ function App() {
         <Routes>
           <Route path="/admin/*" element={<AdminRoutes />} />
           <Route path="/AggTienda" element={<AggTienda />} />
+          <Route path="/clientes" element={<ClientsPage />} />
           
           {/* Rutas protegidas */}
           <Route element={<ProtectedRoute />}>
@@ -30,9 +32,11 @@ function App() {
           </Route>
           {/* Rutas con layout (Navbar) */}
           <Route element={<Navbar />}>
-            <Route path="/" element={<HomePage />} />
+            <Route path="/" element={<Descubrir />} />
             <Route path="/descubrir" element={<Descubrir />} />
             <Route path="/tienda" element={<Tienda />} />
+            <Route path="/quiero-ser-tienda-bnpl" element={<PartnerRequestPage />} />
+            <Route path="/tiendas/:id" element={<StoreDetailPage />} />
             <Route path="/soporte" element={<Soporte />} />
             <Route path="/cartera" element={<Cartera />} />
             <Route path="/pagos" element={<Pagos />} />

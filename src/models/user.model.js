@@ -7,7 +7,7 @@ export default (sequelize, DataTypes) => {
     telefono: { type: DataTypes.STRING, unique: true },
     password_hash: { type: DataTypes.STRING, allowNull: false },
     rol: {
-      type: DataTypes.ENUM('admin_general', 'admin_tiendas', 'soporte', 'finanzas'),
+      type: DataTypes.ENUM('admin_general', 'admin_tiendas', 'soporte', 'super_admin', 'finanzas'),
       allowNull: false,
       defaultValue: 'admin_general',
     },

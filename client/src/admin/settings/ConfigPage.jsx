@@ -41,14 +41,6 @@ export default function ConfigPage() {
             icon={<UsersIcon className="h-6 w-6" />}
           />
           <ModuleCard
-            theme="amber"
-            title="Personalización"
-            text="Personaliza la apariencia del sistema con tus colores y logo."
-            disabled
-            onDisabledClick={() => setDisabledOpen(true)}
-            icon={<BrushIcon className="h-6 w-6" />}
-          />
-          <ModuleCard
             theme="emerald"
             title="Auditoría"
             text="Registro completo de todas las actividades del sistema."
@@ -61,14 +53,6 @@ export default function ConfigPage() {
             text="Ajusta la información básica y parámetros del sistema."
             to="/admin/config/general"
             icon={<SlidersIcon className="h-6 w-6" />}
-          />
-          <ModuleCard
-            theme="rose"
-            title="Respaldo de Datos"
-            text="Genera y restaura copias de seguridad de tu información."
-            disabled
-            onDisabledClick={() => setDisabledOpen(true)}
-            icon={<DatabaseIcon className="h-6 w-6" />}
           />
         </div>
 

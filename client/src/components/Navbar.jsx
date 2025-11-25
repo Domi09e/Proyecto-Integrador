@@ -187,6 +187,18 @@ export default function Navbar() {
                 </li>
               </ul>
             </div>
+
+            <div>
+              <h3 className="font-semibold mb-3 text-gray-900">
+                ¿Quieres ser tienda BNPL?
+              </h3>
+              <Link
+                to="/quiero-ser-tienda-bnpl"
+                className="text-sm text-teal-500"
+              >
+                Envia tu solicitud aquí &rarr;
+              </Link>
+            </div>
           </div>
         </div>
       )}
