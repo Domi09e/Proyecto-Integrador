@@ -3,11 +3,11 @@ import db from "../models/index.js";
 
 const { Cliente, MetodoPago } = db;
 
-/**
- * Utilidad: obtener ID de cliente desde el token (req.user)
- */
 function getClienteIdFromReq(req) {
-  return req.user?.id;
+  if (req.cliente?.id) return req.cliente.id;
+  if(req.user?.tipo === "cliente" && req.user?.id) return req.user.id;
+  if(req.user?.id) return req.user.id; // fallback por compatibilidad
+  return null;
 }
 /* ============================
    PERFIL DEL CLIENTE
@@ -44,6 +44,34 @@ export const getClientProfile = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
+
+export const updateClientProfile = async (req, res) => {
+  try {
+    const clienteId = getClienteIdFromReq(req);
+    if (!clienteId) {
+      return res
+        .status(400)
+        .json({ message: "Cliente no identificado en el token." }); 
+    }
+    const { nombre, apellido, telefono, address } = req.body;
+    const cli = await Cliente.findByPk(clienteId);
+    if (!cli) {
+      return res.status(404).json({ message: "Cliente no encontrado." });
+    }
+    cli.nombre = nombre || cli.nombre;
+    cli.apellido = apellido || cli.apellido;
+    cli.telefono = telefono || cli.telefono;
+    cli.address = address || cli.address;
+    await cli.save();
+
+    res.json({ ok: true });
+  } catch (error) {
+    console.error("Error updateClientProfile:", error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+
 
 /* ============================
    MÉTODOS DE PAGO
@@ -165,10 +193,10 @@ export const getClientPaymentPreferences = async (req, res) => {
 
     if (!cli) return res.status(404).json({ message: "Cliente no encontrado." });
 
-    const dbValue = cli.preferencia_bnpl || "4_quincenas";
-    const apiValue = PREF_DB_TO_API[dbValue] || "4_biweekly";
-
-    res.json({ preferencia_bnpl: apiValue });
+    // devolvemos el valor EXACTO del enum
+    res.json({
+      preferencia_bnpl: cli.preferencia_bnpl,
+    });
   } catch (error) {
     console.error("Error getClientPaymentPreferences:", error);
     res.status(500).json({ message: error.message });
@@ -179,7 +207,7 @@ export const getClientPaymentPreferences = async (req, res) => {
 export const updateClientPaymentPreferences = async (req, res) => {
   try {
     const clienteId = getClienteIdFromReq(req);
-    const { preferencia_bnpl } = req.body; // valor API: "4_biweekly"
+    const { preferencia_bnpl } = req.body;
 
     if (!clienteId) {
       return res
@@ -187,14 +215,23 @@ export const updateClientPaymentPreferences = async (req, res) => {
         .json({ message: "Cliente no identificado en el token." });
     }
 
-    if (!PREF_API_TO_DB[preferencia_bnpl]) {
+    // OJO: aquí usamos los valores del ENUM REAL de la tabla
+    const validValues = [
+      "pago_completo",
+      "pagar_despues",
+      "4_quincenas",
+      "12_meses",
+      "24_meses",
+    ];
+
+    if (!validValues.includes(preferencia_bnpl)) {
       return res.status(400).json({ message: "Preferencia inválida." });
     }
 
     const cli = await Cliente.findByPk(clienteId);
     if (!cli) return res.status(404).json({ message: "Cliente no encontrado." });
 
-    cli.preferencia_bnpl = PREF_API_TO_DB[preferencia_bnpl]; // se guarda "4_quincenas"
+    cli.preferencia_bnpl = preferencia_bnpl;
     await cli.save();
 
     res.json({ ok: true, preferencia_bnpl });
@@ -203,4 +240,5 @@ export const updateClientPaymentPreferences = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
+
 

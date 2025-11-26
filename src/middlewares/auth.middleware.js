@@ -2,7 +2,7 @@ import jwt from "jsonwebtoken";
 import { TOKEN_SECRET } from "../config.js";
 import db from '../models/index.js';
 
-const { User } = db;
+const { Cliente } = db;
 
 export const requireAuth = (req, res, next) => {
   const { token } = req.cookies;
@@ -17,14 +17,14 @@ export const requireAuth = (req, res, next) => {
     }
 
     try {
-      // Verificamos que el usuario del token realmente exista en la BD
-      const user = await User.findByPk(decoded.id);
-      if (!user) {
+      // Se verifica que el usuario del token realmente exista en la BD
+      const cliente = await Cliente.findByPk(decoded.id);
+      if (!cliente) {
         return res.status(404).json({ message: "User not found" });
       }
 
       // Guardamos el usuario encontrado en el objeto request para usarlo en el controlador
-      req.user = user;
+      req.user = cliente;
       next();
     } catch (error) {
       return res.status(500).json({ message: error.message });

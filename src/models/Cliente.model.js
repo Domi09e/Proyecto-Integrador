@@ -12,7 +12,7 @@ export default (sequelize, DataTypes) => {
       poder_credito: {
         type: DataTypes.DECIMAL(10, 2),
         allowNull: false,
-        defaultValue: 0.0,
+        defaultValue: 100.00,
       },
       preferencia_bnpl: {
         type: DataTypes.ENUM(

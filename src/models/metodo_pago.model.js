@@ -4,7 +4,7 @@ export default (sequelize, DataTypes) => {
     id: { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
     cliente_id: { type: DataTypes.INTEGER, allowNull: false },
     tipo: {
-      type: DataTypes.ENUM("tarjeta", "cuenta_bancaria", "wallet"),
+      type: DataTypes.ENUM("tarjeta", "cuenta_bancaria", "wallet_digital"),
       allowNull: false,
     },
     marca: { type: DataTypes.STRING(50) }, // Visa, MC, Banco X, Apple Pay...

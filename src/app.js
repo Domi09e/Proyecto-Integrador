@@ -46,9 +46,6 @@ import bnplRoutes from "./routes/bnpl.routes.js";
 
 app.use("/api", bnplRoutes);
 
-import paymentRoutes from "./routes/payment.routes.js";
-
-app.use("/api", paymentRoutes);
 
 import clientRoutes from "./routes/client.routes.js";
 app.use("/api/client", clientRoutes);

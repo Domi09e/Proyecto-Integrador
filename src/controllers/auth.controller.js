@@ -2,7 +2,7 @@ import db from "../models/index.js";
 import bcrypt from "bcryptjs";
 import { createAccessToken } from "../libs/jwt.js";
 
-const { Cliente } = db;   // 👈 asegúrate de tener este modelo definido
+const { Cliente } = db;  
 
 // POST /api/auth/register-cliente
 export const register = async (req, res) => {
@@ -112,7 +112,7 @@ export const login = async (req, res) => {
 
 // GET /api/auth/verify (para clientes)
 export const verifyToken = async (req, res) => {
-  const clienteFound = await Cliente.findByPk(req.user.id);
+  const clienteFound = await Cliente.findByPk(req.cliente.id);
   if (!clienteFound) return res.status(401).json({ message: "Unauthorized" });
 
   return res.json({

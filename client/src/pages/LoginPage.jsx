@@ -21,7 +21,6 @@ export default function LoginPage() {
   const { signin, errors: loginErrors, isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const [showPassword, setShowPassword] = useState(false);
-
   const handleTogglePassword = () => setShowPassword((v) => !v);
 
   const onSubmit = (data) => signin(data);

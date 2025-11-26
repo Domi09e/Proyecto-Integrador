@@ -41,7 +41,7 @@ export function ProfileSidebar({ user }) {
   // datos que vienen del backend
   const [profile, setProfile] = useState(null);
   const [paymentMethods, setPaymentMethods] = useState([]);
-  const [paymentPreference, setPaymentPreference] = useState("4_biweekly");
+  const [paymentPreference, setPaymentPreference] = useState("4_quincenas");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
@@ -49,7 +49,7 @@ export function ProfileSidebar({ user }) {
   // formulario de nuevo método de pago
   const [newMethod, setNewMethod] = useState({
     tipo: "tarjeta", // 👈 ahora sí coincide con el ENUM
-    marca: "",
+    marca: "",  
     ultimos_cuatro_digitos: "",
     fecha_expiracion: "",
     es_predeterminado: 0,
@@ -100,7 +100,7 @@ export function ProfileSidebar({ user }) {
 
         setProfile(profileRes.data || null);
         setPaymentMethods(methodsRes.data || []);
-        setPaymentPreference(prefRes.data?.preferencia_bnpl || "4_biweekly");
+        setPaymentPreference(prefRes.data?.preferencia_bnpl || "4_quincenas");
       } catch (err) {
         console.error("Error cargando datos del cliente:", err);
         setErrorMsg("No se pudieron cargar los datos del perfil.");
@@ -198,7 +198,13 @@ export function ProfileSidebar({ user }) {
         nombre: profile.nombre,
         apellido: profile.apellido,
         telefono: profile.telefono,
-        direccion: profile.direccion,
+        _address: profile.address,
+        get address() {
+          return this._address;
+        },
+        set address(value) {
+          this._address = value;
+        },
       };
       const { data } = await api.put("/client/profile", payload);
       setProfile(data);
@@ -326,7 +332,7 @@ export function ProfileSidebar({ user }) {
           >
             <div>
               <p className="text-sm font-medium text-gray-800">
-                {m.marca || "Tarjeta"} •••• {m.ultimos_cuatro_digitos}
+                {m.marca || "tarjeta"} •••• {m.ultimos_cuatro_digitos}
               </p>
               <p className="text-xs text-gray-500">
                 {m.tipo} — vence {m.fecha_expiracion}
@@ -366,9 +372,9 @@ export function ProfileSidebar({ user }) {
             onChange={handleChangeNewMethod}
             className="w-full border rounded-lg px-3 py-2 text-sm"
           >
-            <option value="tarjeta">Tarjeta de crédito/débito</option>
-            <option value="cuenta_bancaria">Cuenta bancaria</option>
-            <option value="wallet">Wallet digital</option>
+            <option value="tarjeta">tarjeta</option>
+            <option value="cuenta_bancaria">cuenta_bancaria</option>
+            <option value="wallet_digital">wallet_digital</option>
           </select>
         </div>
 
@@ -558,9 +564,9 @@ export function ProfileSidebar({ user }) {
             </label>
             <input
               className="w-full border rounded-lg px-3 py-2 text-sm"
-              value={profile.direccion || ""}
+              value={profile.address || ""}
               onChange={(e) =>
-                setProfile({ ...profile, direccion: e.target.value })
+                setProfile({ ...profile, address: e.target.value })
               }
             />
           </div>

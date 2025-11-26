@@ -2,6 +2,7 @@
 import { Router } from "express";
 import {
   getClientProfile,
+  updateClientProfile,
   getClientPaymentMethods,
   createClientPaymentMethod,
   deleteClientPaymentMethod,
@@ -17,11 +18,12 @@ router.use(requireAuth);
 
 // Perfil básico del cliente
 router.get("/profile", getClientProfile);
+router.put("/profile", updateClientProfile);
 
 // Métodos de pago
 router.get("/payment-methods", getClientPaymentMethods);
 router.post("/payment-methods", createClientPaymentMethod);
-router.delete("/payment-methods/:id", deleteClientPaymentMethod);
+router.delete("/payment-methods/:id", deleteClientPaymentMethod); 
 
 // Preferencias BNPL (forma favorita de pagar)
 router.get("/payment-preferences", getClientPaymentPreferences);
