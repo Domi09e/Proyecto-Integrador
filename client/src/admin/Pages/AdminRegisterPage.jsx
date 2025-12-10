@@ -1,3 +1,4 @@
+// client/src/admin/Pages/AdminRegisterPage.jsx
 import { useState, useEffect } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAdminAuth } from "../context/adminAuth.context";

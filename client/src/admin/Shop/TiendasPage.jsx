@@ -1,494 +1,309 @@
-// src/admin/pages/AdminStores.jsx
-import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { fetchAdminStores /*, deactivateStore */ } from "../../api/stores.js";
-import { useAdminAuth } from "../context/adminAuth.context.jsx";
+import { useEffect, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { 
+  Store, 
+  Search, 
+  Plus, 
+  Edit3, 
+  Trash2, 
+  MapPin, 
+  Phone, 
+  CheckCircle2, 
+  XCircle,
+  AlertTriangle,
+  ShoppingBag,
+  Globe,
+  ArrowLeft // Nuevo
+} from "lucide-react";
+import api from "../../api/axios";
+import { motion, AnimatePresence } from "framer-motion";
 
-const BRAND = {
-  primary: "#0d9488",   // teal-600
-  secondary: "#0f766e", // teal-700
-  accent: "#10b981",    // emerald-500
-};
-
-export default function AdminStores() {
-  const nav = useNavigate();
-  const { user } = useAdminAuth(); // admin | admin_general | admin_tiendas | soporte | finanzas | super_admin
+export default function TiendasPage() {
+  const navigate = useNavigate();
   const [stores, setStores] = useState([]);
-  const [q, setQ] = useState("");
   const [loading, setLoading] = useState(true);
-  const [detail, setDetail] = useState(null); // store para modal
-  const [error, setError] = useState("");
-  const [passNeeded, setPassNeeded] = useState(false);
-  const [pwd, setPwd] = useState("");
-  const [deletingId, setDeletingId] = useState(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  
+  // Estado para el modal de eliminar
+  const [deleteModal, setDeleteModal] = useState({ show: false, id: null, name: "" });
 
-  async function load() {
-    setLoading(true);
-    setError("");
-    try {
-      const list = await fetchAdminStores();
-      setStores(list);
-    } catch (e) {
-      setError(e?.response?.data?.message || "Error cargando tiendas");
-    } finally {
-      setLoading(false);
-    }
-  }
-
+  // Cargar tiendas
   useEffect(() => {
-    load();
+    const loadStores = async () => {
+      try {
+        const { data } = await api.get("/admin/tiendas");
+        setStores(data);
+      } catch (error) {
+        console.error("Error cargando tiendas", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadStores();
   }, []);
 
-  const filtered = useMemo(() => {
-    const t = q.trim().toLowerCase();
-    if (!t) return stores;
-    return stores.filter(
-      (s) =>
-        (s.nombre || "").toLowerCase().includes(t) ||
-        (s.direccion || "").toLowerCase().includes(t) ||
-        (s.telefono || "").toLowerCase().includes(t) ||
-        (s.rnc || "").toLowerCase().includes(t)
-    );
-  }, [q, stores]);
+  // Filtrado
+  const filteredStores = stores.filter(store => 
+    store.nombre?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    store.rnc?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
-  const total = stores.length;
-  const activeCount = stores.filter((s) => String(s.estado) === "activa").length;
-  const oldestName = useMemo(() => stores[0]?.nombre ?? "N/A", [stores]); // si tu API ya trae ordenado por antigüedad
+  // Estadísticas rápidas
+  const totalStores = stores.length;
+  const activeStores = stores.filter(s => s.estado === 'activa').length;
 
-  const canEdit = (role) =>
-    role === "admin" || role === "admin_general" || role === "admin_tiendas" || role === "super_admin";
-  const canDelete = (role) => role === "admin_general" || role === "super_admin";
-
-  const onDeleteClick = (store) => {
-    setDeletingId(store.id);
-    setPassNeeded(true); // si tu backend exige password
-  };
-
-  const confirmDelete = async () => {
+  const handleDelete = async () => {
     try {
-      // await deactivateStore(deletingId, { password: pwd }); // habilita cuando tengas la API
-      setPassNeeded(false);
-      setPwd("");
-      setDeletingId(null);
-      await load();
-    } catch (e) {
-      alert(e?.response?.data?.message || "No se pudo desactivar la tienda");
+      await api.delete(`/admin/tiendas/${deleteModal.id}`);
+      setStores(prev => prev.filter(s => s.id !== deleteModal.id));
+      setDeleteModal({ show: false, id: null, name: "" });
+    } catch (error) {
+      alert("Error al eliminar la tienda.");
     }
   };
 
+  if (loading) return (
+    <div className="flex items-center justify-center min-h-screen bg-slate-900 text-slate-400">
+      <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-emerald-500"></div>
+    </div>
+  );
+
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-100">
-      {/* Header / Volver */}
-      <div className="sticky top-0 z-10 bg-gradient-to-r from-teal-600 to-emerald-600 text-white shadow">
-        <div className="mx-auto max-w-7xl px-4 py-4 flex items-center justify-between">
-          <h1 className="text-xl md:text-2xl font-bold flex items-center gap-2">
-            <StoreIcon className="h-7 w-7 text-white/90" />
-            Gestión de Tiendas
-          </h1>
-          <button
-            onClick={() => nav("/admin")}
-            className="rounded-xl border border-white/20 bg-white/10 backdrop-blur px-3 py-2 text-sm font-medium hover:bg-white/15"
+    <div className="min-h-screen bg-slate-900 text-slate-100 p-6 sm:p-10">
+      
+      {/* --- HEADER CON BOTÓN ATRÁS --- */}
+      <header className="max-w-7xl mx-auto mb-8 border-b border-slate-800 pb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div className="flex items-center gap-4">
+          <button 
+            onClick={() => navigate(-1)} 
+            className="p-3 rounded-xl bg-slate-800 border border-slate-700 hover:bg-slate-700 hover:text-white transition text-slate-400"
+            title="Volver atrás"
           >
-            Volver
+            <ArrowLeft size={24} />
           </button>
-        </div>
-      </div>
-
-      <div className="mx-auto max-w-7xl px-4 py-6">
-        {/* Stats */}
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 mb-6">
-          <StatCard
-            color="teal"
-            icon={<StoreIcon className="h-5 w-5" />}
-            label="Tiendas Registradas"
-            value={total}
-          />
-          <StatCard
-            color="emerald"
-            icon={<CheckIcon className="h-5 w-5" />}
-            label="Tiendas Activas"
-            value={activeCount}
-          />
-          <StatCard
-            color="indigo"
-            icon={<StarIcon className="h-5 w-5" />}
-            label="Tienda más antigua"
-            value={oldestName}
-          />
-        </div>
-
-        {/* Card listado */}
-        <div className="rounded-2xl border border-slate-700/60 overflow-hidden shadow-xl bg-slate-800">
-          <div className="bg-gradient-to-r from-teal-600 to-emerald-600 px-4 py-4">
-            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <h2 className="text-white font-semibold flex items-center gap-2">
-                <ListIcon className="h-5 w-5" />
-                Listado de Tiendas
-              </h2>
-              <div className="relative">
-                <input
-                  value={q}
-                  onChange={(e) => setQ(e.target.value)}
-                  className="w-full md:w-80 rounded-full border border-teal-500/30 bg-slate-900/70 px-4 py-2.5 pr-10 text-sm text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500/40"
-                  placeholder="Buscar tienda…"
-                />
-                <SearchIcon className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-emerald-300" />
+          
+          <div>
+            <h1 className="text-3xl font-bold text-white tracking-tight flex items-center gap-3">
+              <div className="p-2 bg-emerald-500/20 rounded-lg text-emerald-400">
+                <Store size={24} />
               </div>
-            </div>
+              Catálogo de Tiendas
+            </h1>
+            <p className="text-slate-400 text-sm mt-1">Administra los comercios afiliados.</p>
           </div>
+        </div>
 
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-sm">
-            <thead className="bg-slate-800/80 text-slate-300 uppercase text-xs border-b border-slate-700/60">
-              <tr>
-                <th className="px-4 py-3 text-left">Logo</th>
-                <th className="px-4 py-3 text-left">Nombre</th>
-                <th className="px-4 py-3 text-left">Dirección</th>
-                <th className="px-4 py-3 text-left">Teléfono</th>
-                <th className="px-4 py-3 text-left">RNC</th>
-                <th className="px-4 py-3 text-right">Acciones</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-700/60 text-slate-200">
-              {loading ? (
-                <tr>
-                  <td colSpan={6} className="px-4 py-6 text-slate-400">
-                    Cargando…
-                  </td>
+        <Link 
+          to="/AggTienda" 
+          className="bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-3 rounded-xl font-bold flex items-center gap-2 transition shadow-lg shadow-emerald-900/20"
+        >
+          <Plus size={20} /> Nueva Tienda
+        </Link>
+      </header>
+
+      <div className="max-w-7xl mx-auto space-y-8">
+        
+        {/* --- STATS & SEARCH --- */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+           <StatCard 
+             title="Total Tiendas" 
+             value={totalStores} 
+             icon={<ShoppingBag size={24}/>} 
+             color="text-indigo-400" 
+             bg="bg-indigo-500/10"
+           />
+           <StatCard 
+             title="Tiendas Activas" 
+             value={activeStores} 
+             icon={<CheckCircle2 size={24}/>} 
+             color="text-emerald-400" 
+             bg="bg-emerald-500/10"
+           />
+           
+           {/* Search Bar Estilizado */}
+           <div className="bg-slate-800 p-2 rounded-2xl border border-slate-700 flex items-center relative shadow-lg">
+              <Search className="absolute left-4 text-slate-500" size={20} />
+              <input 
+                type="text" 
+                placeholder="Buscar tienda..." 
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full bg-slate-900 border-none text-slate-200 rounded-xl pl-12 pr-4 py-4 focus:ring-2 focus:ring-emerald-500/50 outline-none placeholder:text-slate-600 transition h-full"
+              />
+           </div>
+        </div>
+
+        {/* --- TABLA DE TIENDAS --- */}
+        <div className="bg-slate-800 rounded-3xl border border-slate-700 shadow-xl overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-slate-900/50 text-slate-400 text-xs font-bold uppercase tracking-wider border-b border-slate-700">
+                  <th className="p-6">Perfil Tienda</th>
+                  <th className="p-6">Información</th>
+                  <th className="p-6">RNC</th>
+                  <th className="p-6 text-center">Estado</th>
+                  <th className="p-6 text-center">Acciones</th>
                 </tr>
-              ) : filtered.length ? (
-                filtered.map((s) => (
-                  <tr key={s.id} className="hover:bg-slate-700/40">
-                    <td className="px-4 py-3">
-                      <div className="h-12 w-12 overflow-hidden rounded-lg border border-slate-700 bg-slate-700/40">
-                        {s.logo_url ? (
-                          <img src={s.logo_url} alt={s.nombre} className="h-full w-full object-cover" />
-                        ) : (
-                          <div className="grid h-full w-full place-items-center text-slate-400 text-xs">
-                            Sin imagen
+              </thead>
+              <tbody className="divide-y divide-slate-700/50">
+                {filteredStores.length === 0 ? (
+                  <tr>
+                    <td colSpan="5" className="p-16 text-center text-slate-500">
+                      No se encontraron resultados.
+                    </td>
+                  </tr>
+                ) : filteredStores.map((store) => (
+                  <tr key={store.id} className="hover:bg-slate-700/20 transition-colors group">
+                    
+                    {/* Perfil */}
+                    <td className="p-6">
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-xl bg-slate-700 flex items-center justify-center overflow-hidden border border-slate-600 shrink-0">
+                          {store.logo || store.logo_url ? (
+                            <img 
+                               src={store.logo || store.logo_url} 
+                               alt={store.nombre} 
+                               className="w-full h-full object-contain p-1"
+                            />
+                          ) : (
+                            <span className="text-slate-300 font-bold text-lg">{store.nombre?.charAt(0)}</span>
+                          )}
+                        </div>
+                        <div>
+                          <p className="font-bold text-white text-base">{store.nombre}</p>
+                          <div className="flex items-center gap-2 mt-1">
+                             <span className="text-[10px] font-bold bg-slate-700 text-slate-300 px-2 py-0.5 rounded border border-slate-600">
+                               {store.category || "General"}
+                             </span>
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+
+                    {/* Información */}
+                    <td className="p-6">
+                      <div className="space-y-1.5">
+                        {store.direccion && (
+                          <div className="flex items-center gap-2 text-xs text-slate-300">
+                            <MapPin size={14} className="text-indigo-400"/> 
+                            <span className="truncate max-w-[150px]">{store.direccion}</span>
+                          </div>
+                        )}
+                        {store.telefono && (
+                          <div className="flex items-center gap-2 text-xs text-slate-300">
+                            <Phone size={14} className="text-emerald-400"/> {store.telefono}
+                          </div>
+                        )}
+                         {store.sitio_web && (
+                          <div className="flex items-center gap-2 text-xs text-slate-300">
+                            <Globe size={14} className="text-blue-400"/> 
+                            <a href={store.sitio_web} target="_blank" rel="noreferrer" className="hover:text-white hover:underline truncate max-w-[150px]">Web</a>
                           </div>
                         )}
                       </div>
                     </td>
-                    <td className="px-4 py-3">
-                      <div className="font-semibold text-slate-100">{s.nombre}</div>
+
+                    {/* RNC */}
+                    <td className="p-6 text-sm text-slate-400 font-mono">
+                      {store.rnc || "N/A"}
                     </td>
-                    <td className="px-4 py-3 text-slate-300">{s.direccion || "—"}</td>
-                    <td className="px-4 py-3 text-slate-300">{s.telefono || "—"}</td>
-                    <td className="px-4 py-3">
-                      <span className="inline-flex items-center rounded-full bg-emerald-500/15 px-2.5 py-1 text-xs font-medium text-emerald-300 ring-1 ring-inset ring-emerald-500/25">
-                        {s.rnc || "—"}
+
+                    {/* Estado */}
+                    <td className="p-6 text-center">
+                      <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide border ${
+                        store.estado === 'activa' 
+                          ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" 
+                          : "bg-slate-700 text-slate-400 border-slate-600"
+                      }`}>
+                        {store.estado === 'activa' ? <CheckCircle2 size={12}/> : <XCircle size={12}/>}
+                        {store.estado}
                       </span>
                     </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center justify-end gap-2">
-                        <button
-                          className="rounded-lg bg-teal-600/90 px-3 py-1.5 text-white hover:bg-teal-500"
-                          onClick={() => setDetail(s)}
-                          title="Ver"
+
+                    {/* Acciones (VISIBLES SIEMPRE) */}
+                    <td className="p-6">
+                      <div className="flex items-center justify-center gap-3">
+                        <button 
+                          onClick={() => navigate(`/admin/tiendas/${store.id}/edit`)}
+                          className="p-2 bg-slate-700 hover:bg-indigo-600 text-slate-300 hover:text-white rounded-lg transition-colors border border-slate-600 hover:border-indigo-500 shadow-sm"
+                          title="Editar Tienda"
                         >
-                          <EyeIcon className="h-4 w-4" />
+                          <Edit3 size={18} />
                         </button>
-
-                        {canEdit(user?.rol) && (
-                          <button
-                            className="rounded-lg bg-amber-500/90 px-3 py-1.5 text-white hover:bg-amber-400"
-                            onClick={() => nav(`/admin/tiendas/${s.id}/edit`)}
-                            title="Editar"
-                          >
-                            <PencilIcon className="h-4 w-4" />
-                          </button>
-                        )}
-
-                        {canDelete(user?.rol) && (
-                          <button
-                            className="rounded-lg bg-rose-600/90 px-3 py-1.5 text-white hover:bg-rose-500"
-                            onClick={() => onDeleteClick(s)}
-                            title="Desactivar"
-                          >
-                            <TrashIcon className="h-4 w-4" />
-                          </button>
-                        )}
+                        <button 
+                          onClick={() => setDeleteModal({ show: true, id: store.id, name: store.nombre })}
+                          className="p-2 bg-slate-700 hover:bg-rose-600 text-slate-300 hover:text-white rounded-lg transition-colors border border-slate-600 hover:border-rose-500 shadow-sm"
+                          title="Eliminar Tienda"
+                        >
+                          <Trash2 size={18} />
+                        </button>
                       </div>
                     </td>
                   </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={6} className="px-4 py-6 text-slate-400">
-                    No se encontraron tiendas.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-        {/* Botón flotante (crear) */}
-        {(user?.rol === "admin" ||
-          user?.rol === "admin_general" ||
-          user?.rol === "admin_tiendas" ||
-          user?.rol === "super_admin") && (
-          <button
-            onClick={() => nav("/AggTienda")}
-            className="fixed bottom-6 right-6 grid h-14 w-14 place-items-center rounded-full bg-teal-600 text-white shadow-2xl hover:bg-teal-500"
-            title="Agregar tienda"
-          >
-            <PlusIcon className="h-6 w-6" />
-          </button>
-        )}
-
-        {/* Modal Detalles */}
-        {detail && <DetailsModal store={detail} onClose={() => setDetail(null)} />}
-
-        {/* Modal Confirmación con password (solo si tu backend lo pide) */}
-        {passNeeded && (
-          <PasswordModal
-            onCancel={() => {
-              setPassNeeded(false);
-              setPwd("");
-              setDeletingId(null);
-            }}
-            onConfirm={confirmDelete}
-            pwd={pwd}
-            setPwd={setPwd}
-          />
-        )}
-
-        {/* Error general */}
-        {!!error && (
-          <div className="mt-4 rounded-xl border border-rose-700/40 bg-rose-900/30 px-4 py-2 text-sm text-rose-200">
-            {String(error)}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/* ---------- Subcomponentes ---------- */
-
-function StatCard({ color = "teal", icon, label, value }) {
-  const tone =
-    {
-      teal: "text-teal-300 bg-teal-500/10 ring-teal-500/25",
-      emerald: "text-emerald-300 bg-emerald-500/10 ring-emerald-500/25",
-      indigo: "text-indigo-300 bg-indigo-500/10 ring-indigo-500/25",
-    }[color] || "text-teal-300 bg-teal-500/10 ring-teal-500/25";
-
-  return (
-    <div className="rounded-2xl border border-slate-700/60 bg-slate-800 p-4 shadow-sm">
-      <div className="flex items-center gap-3">
-        <div className={`grid h-11 w-11 place-items-center rounded-lg ${tone} text-base`}>{icon}</div>
-        <div>
-          <div className="text-2xl font-extrabold leading-tight text-slate-100">{value}</div>
-          <div className="text-xs text-slate-400">{label}</div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function DetailsModal({ store, onClose }) {
-  const logoSrc = store.logo_url
-    ? store.logo_url.startsWith("http")
-      ? store.logo_url
-      : `../../../../uploads/${store.logo_url}`
-    : "/assets/default_store.png";
-
-  return (
-    <div className="fixed inset-0 z-50 bg-black/60">
-      <div className="absolute inset-0 grid place-items-center p-4">
-        <div className="w-full max-w-md rounded-2xl bg-slate-900 text-slate-100 shadow-2xl border border-slate-700">
-          <div className="flex items-center justify-between border-b border-slate-700 px-5 py-3">
-            <div className="flex items-center gap-2 font-semibold">
-              <StoreIcon className="h-5 w-5 text-emerald-400" />
-              Detalles de Tienda
-            </div>
-            <button onClick={onClose} className="rounded-lg p-1.5 hover:bg-slate-800">
-              <XIcon className="h-5 w-5 text-slate-400" />
-            </button>
-          </div>
-
-          <div className="px-5 py-4">
-            <div className="mb-4 grid place-items-center">
-              <img
-                src={logoSrc}
-                alt={store.name}
-                className="h-24 w-24 rounded-xl border border-slate-700 object-cover"
-              />
-            </div>
-
-            <div className="mb-3">
-              <div className="text-xs text-slate-400">Nombre</div>
-              <div className="text-lg font-semibold">{store.nombre}</div>
-            </div>
-
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <InfoRow label="Ubicación" value={store.direccion || "—"} />
-              <InfoRow label="Teléfono" value={store.telefono || "—"} />
-            </div>
-
-            <div className="mt-3">
-              <div className="text-xs text-slate-400">RNC</div>
-              <span className="mt-1 inline-flex items-center rounded-full bg-emerald-500/15 px-3 py-1 text-xs font-medium text-emerald-300 ring-1 ring-inset ring-emerald-500/25">
-                {store.rnc || "—"}
-              </span>
-            </div>
-          </div>
-
-          <div className="flex justify-end gap-2 border-t border-slate-700 px-5 py-3">
-            <button
-              onClick={onClose}
-              className="rounded-lg border border-slate-700 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-slate-800"
-            >
-              Cerrar
-            </button>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
-    </div>
-  );
-}
 
-function PasswordModal({ onCancel, onConfirm, pwd, setPwd }) {
-  return (
-    <div className="fixed inset-0 z-50 bg-black/60">
-      <div className="absolute inset-0 grid place-items-center p-4">
-        <div className="w-full max-w-md rounded-2xl bg-slate-900 text-slate-100 shadow-2xl border border-slate-700">
-          <div className="border-b border-slate-700 px-5 py-3">
-            <div className="text-rose-300 font-semibold flex items-center gap-2">
-              <AlertIcon className="h-5 w-5" /> ¡ADVERTENCIA CRÍTICA!
-            </div>
-          </div>
-
-          <div className="px-5 py-4 text-sm text-slate-200">
-            <p>
-              Estás a punto de <b>desactivar permanentemente</b> esta tienda.
-            </p>
-            <ul className="mt-2 list-disc pl-5 text-slate-300">
-              <li>Productos asociados</li>
-              <li>Registros de ventas e inventario</li>
-              <li>Reportes históricos</li>
-            </ul>
-            <p className="mt-3">
-              Ingresa tu contraseña de <b>super_admin</b> para confirmar:
-            </p>
-
-            <input
-              type="password"
-              value={pwd}
-              onChange={(e) => setPwd(e.target.value)}
-              placeholder="Contraseña"
-              className="mt-2 w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-rose-500/40"
+      {/* --- MODAL DE CONFIRMACIÓN DE ELIMINAR --- */}
+      <AnimatePresence>
+        {deleteModal.show && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+              onClick={() => setDeleteModal({ show: false, id: null, name: "" })}
             />
-          </div>
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
+              className="relative bg-slate-800 rounded-2xl border border-slate-700 p-6 w-full max-w-sm shadow-2xl text-center"
+            >
+              <div className="w-14 h-14 bg-rose-500/20 rounded-full flex items-center justify-center text-rose-500 mb-4 mx-auto border border-rose-500/30">
+                <AlertTriangle size={28} />
+              </div>
+              
+              <h3 className="text-xl font-bold text-white mb-2">¿Eliminar Tienda?</h3>
+              <p className="text-slate-400 text-sm mb-6 leading-relaxed">
+                Estás a punto de eliminar <strong>"{deleteModal.name}"</strong>. Esta acción no se puede deshacer.
+              </p>
 
-          <div className="flex justify-end gap-2 border-t border-slate-700 px-5 py-3">
-            <button
-              onClick={onCancel}
-              className="rounded-lg border border-slate-700 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-slate-800"
-            >
-              Cancelar
-            </button>
-            <button
-              onClick={onConfirm}
-              className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-medium text-white hover:bg-rose-500"
-            >
-              Confirmar desactivación
-            </button>
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => setDeleteModal({ show: false, id: null, name: "" })}
+                  className="flex-1 py-2.5 rounded-xl border border-slate-600 text-slate-300 font-bold hover:bg-slate-700 transition"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  onClick={handleDelete}
+                  className="flex-1 py-2.5 rounded-xl bg-rose-600 text-white font-bold hover:bg-rose-700 transition shadow-lg shadow-rose-900/20"
+                >
+                  Sí, Eliminar
+                </button>
+              </div>
+            </motion.div>
           </div>
-        </div>
-      </div>
+        )}
+      </AnimatePresence>
+
     </div>
   );
 }
 
-function InfoRow({ label, value }) {
+// Helpers
+function StatCard({ title, value, icon, color, bg }) {
   return (
-    <div>
-      <div className="text-xs text-slate-400">{label}</div>
-      <div className="font-medium text-slate-100">{value}</div>
+    <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-lg flex items-center justify-between hover:-translate-y-1 transition-transform duration-300">
+       <div>
+          <p className="text-slate-400 text-xs font-bold uppercase tracking-wider mb-2">{title}</p>
+          <h3 className="text-2xl font-black text-white">{value}</h3>
+       </div>
+       <div className={`p-3 rounded-xl ${bg} ${color}`}>
+          {icon}
+       </div>
     </div>
-  );
-}
-
-/* ---------- Iconitos simples (SVG inline) ---------- */
-function StoreIcon(props) {
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor" {...props}>
-      <path d="M4 4h16v2H4V4zm16 4H4l1.5 10.5A2 2 0 007.48 20h9.04a2 2 0 001.98-1.5L20 8zM9 12h2v6H9v-6zm4 0h2v6h-2v-6z" />
-    </svg>
-  );
-}
-function CheckIcon(props) {
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor" {...props}>
-      <path d="M9 16.2l-3.5-3.5L4 14.2l5 5 12-12-1.5-1.5z" />
-    </svg>
-  );
-}
-function StarIcon(props) {
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor" {...props}>
-      <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
-    </svg>
-  );
-}
-function ListIcon(props) {
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor" {...props}>
-      <path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zM3 9h2V7H3v2zm4 0h14V7H7v2zm0 4h14v-2H7v2zm0 4h14v-2H7v2z" />
-    </svg>
-  );
-}
-function SearchIcon(props) {
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor" {...props}>
-      <path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19 15.5 14zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" />
-    </svg>
-  );
-}
-function EyeIcon(props) {
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor" {...props}>
-      <path d="M12 6a9.77 9.77 0 019 6 9.77 9.77 0 01-18 0 9.77 9.77 0 019-6zm0 10a4 4 0 100-8 4 4 0 000 8z" />
-    </svg>
-  );
-}
-function PencilIcon(props) {
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor" {...props}>
-      <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1.003 1.003 0 000-1.42l-2.34-2.34a1.003 1.003 0 00-1.42 0L14.13 4.9l3.75 3.75 2.83-2.83z" />
-    </svg>
-  );
-}
-function TrashIcon(props) {
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor" {...props}>
-      <path d="M16 9v10H8V9h8m-1.5-6h-5l-1 1H5v2h14V4h-3.5l-1-1z" />
-    </svg>
-  );
-}
-function PlusIcon(props) {
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor" {...props}>
-      <path d="M19 11H13V5h-2v6H5v2h6v6h2v-6h6z" />
-    </svg>
-  );
-}
-function XIcon(props) {
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor" {...props}>
-      <path d="M18.3 5.71L12 12l6.3 6.29-1.41 1.42L10.59 13.4 4.29 19.71 2.88 18.3 9.17 12 2.88 5.71 4.29 4.3 10.59 10.6l6.3-6.3z" />
-    </svg>
-  );
-}
-function AlertIcon(props) {
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor" {...props}>
-      <path d="M1 21h22L12 2 1 21zm12-3h-2v2h2v-2zm0-6h-2v4h2v-4z" />
-    </svg>
   );
 }

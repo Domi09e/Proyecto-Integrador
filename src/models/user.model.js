@@ -1,3 +1,6 @@
+
+// src/models/user.model.js
+
 export default (sequelize, DataTypes) => {
   const Usuario = sequelize.define('Usuario', {
     id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },

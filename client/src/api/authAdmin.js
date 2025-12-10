@@ -1,3 +1,5 @@
+// client/src/api/authAdmin.js
+
 import { axiosLib } from "./axios";
 // Axios instance (ajusta VITE_API_URL si usas envs)
 

@@ -1,3 +1,5 @@
+// client/src/schemas/auth.js
+
 import { z } from "zod";
 
 const emailSchema = z

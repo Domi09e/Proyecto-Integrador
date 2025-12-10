@@ -1,206 +1,272 @@
+// client/src/pages/BNPL.jsx
 import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Search, ArrowRight, ShoppingBag, CreditCard, ShieldCheck, Tag } from "lucide-react";
+import { motion } from "framer-motion"; 
+import { 
+  Search, 
+  ArrowRight, 
+  ShoppingBag, 
+  CreditCard, 
+  ShieldCheck, 
+  Zap, 
+  TrendingUp,
+  Smartphone,
+  Shirt,
+  Home,
+  Gift
+} from "lucide-react";
+import { fetchPublicStores } from "../api/stores"; // 👈 Conexión real con BD
 
-// --- Componente de Tarjeta de Tienda Dinámica (Estilo Klarna) ---
-const DynamicStoreCard = ({ name, logo, cashback, bgColor = "bg-gray-100" }) => (
-  <Link to={`/tienda/${name.toLowerCase()}`} className={`group relative aspect-square rounded-2xl flex items-center justify-center p-4 overflow-hidden transition-transform duration-300 hover:scale-105 ${bgColor}`}>
-    {cashback && (
-      <div className="absolute top-3 left-3 bg-pink-500 text-white text-xs font-bold px-2 py-1 rounded-full flex items-center gap-1 z-10">
-        <Tag size={12} />
-        <span>{cashback}</span>
-      </div>
-    )}
-    <img
-      src={logo}
-      alt={`${name} logo`}
-      className="h-16 w-24 object-contain transition-transform duration-300 group-hover:scale-110"
-    />
-  </Link>
-);
+// Categorías rápidas (Iconos)
+const CATEGORIES = [
+  { name: "Tecnología", icon: <Smartphone />, color: "bg-blue-100 text-blue-600" },
+  { name: "Moda", icon: <Shirt />, color: "bg-rose-100 text-rose-600" },
+  { name: "Hogar", icon: <Home />, color: "bg-amber-100 text-amber-600" },
+  { name: "Variedades", icon: <Gift />, color: "bg-purple-100 text-purple-600" },
+];
 
-// --- Componente de Tarjeta de Beneficio ---
-const BenefitCard = ({ icon, title, description }) => (
-    <div className="flex items-start gap-4 text-left">
-        <div className="flex-shrink-0 bg-pink-100 text-pink-500 rounded-lg p-3 mt-1">
-            {icon}
-        </div>
-        <div>
-            <h3 className="text-xl font-semibold mb-1 text-gray-900">{title}</h3>
-            <p className="text-gray-600 leading-relaxed">{description}</p>
-        </div>
-    </div>
-);
-
-
-// --- Componente Principal de la Página ---
 export default function Descubrir() {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
-  const [storeSearch, setStoreSearch] = useState("");
   const [stores, setStores] = useState([]);
-  const [benefits, setBenefits] = useState([]);
+  const [loading, setLoading] = useState(true);
 
+  // 1. Cargar Tiendas Reales al inicio
   useEffect(() => {
-    const mockStores = [
-      { id: 1, name: "Amazon", logo: "https://upload.wikimedia.org/wikipedia/commons/a/a9/Amazon_logo.svg", cashback: "Hasta 5%" },
-      { id: 2, name: "Nike", logo: "https://upload.wikimedia.org/wikipedia/commons/a/a6/Logo_NIKE.svg" },
-      { id: 3, name: "Apple", logo: "https://upload.wikimedia.org/wikipedia/commons/f/fa/Apple_logo_black.svg" },
-      { id: 4, name: "Adidas", logo: "https://upload.wikimedia.org/wikipedia/commons/2/20/Adidas_Logo.svg", cashback: "10% OFF" },
-      { id: 5, name: "Sephora", logo: "https://upload.wikimedia.org/wikipedia/commons/3/3c/Sephora_Logo.svg" },
-      { id: 6, name: "Zara", logo: "https://upload.wikimedia.org/wikipedia/commons/f/f7/Zara_Logo.svg" },
-      { id: 7, name: "H&M", logo: "https://upload.wikimedia.org/wikipedia/commons/5/5f/H%26M-Logo.svg" },
-      { id: 8, name: "IKEA", logo: "https://upload.wikimedia.org/wikipedia/commons/c/c7/IKEA_logo.svg", cashback: "Envío gratis" },
-      { id: 9, name: "Target", logo: "https://upload.wikimedia.org/wikipedia/commons/9/9e/Target_logo.svg"},
-      { id: 10, name: "Walmart", logo: "https://upload.wikimedia.org/wikipedia/commons/1/14/Walmart_Spark.svg"},
-    ];
-    
-    const mockBenefits = [
-        { icon: <ShoppingBag size={24} />, title: "Compra flexible", description: "Divide cualquier compra en 4 pagos sin interés, directamente al pagar." },
-        { icon: <CreditCard size={24} />, title: "Sin comisiones ocultas", description: "Nunca pagarás más de lo que ves. Sin intereses ni comisiones sorpresas." },
-        { icon: <ShieldCheck size={24} />, title: "Seguro y protegido", description: "Tu información está segura con nuestra protección al comprador de principio a fin." }
-    ];
-
-    setStores(mockStores);
-    setBenefits(mockBenefits);
+    const loadStores = async () => {
+      try {
+        const data = await fetchPublicStores();
+        setStores(data);
+      } catch (error) {
+        console.error("Error cargando tiendas:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadStores();
   }, []);
 
+  // Filtro dinámico
   const filteredStores = stores.filter((store) =>
-    store.name.toLowerCase().includes(search.toLowerCase())
+    store.name?.toLowerCase().includes(search.toLowerCase())
   );
 
-  const handleStoreSearchSubmit = (e) => {
-    e.preventDefault();
-    const searchTerm = storeSearch.trim().toLowerCase();
-    if (!searchTerm) return;
-
-    const storeExists = stores.find(
-      (store) => store.name.toLowerCase() === searchTerm
-    );
-
-    if (storeExists) {
-      navigate(`/tienda/${searchTerm}`);
-    } else {
-      alert("Tienda no encontrada. Intenta con otra.");
-    }
+  // Animaciones
+  const fadeInUp = {
+    hidden: { opacity: 0, y: 20 },
+    visible: { opacity: 1, y: 0, transition: { duration: 0.6 } }
   };
 
   return (
-    <div className="bg-white text-gray-800">
-      {/* Hero Section */}
-      <header className="bg-pink-50">
-        <div className="w-full px-6 lg:px-8 py-20 lg:py-32 flex flex-col lg:flex-row items-center">
-          <div className="lg:w-1/2 text-center">
-            <h1 className="text-5xl md:text-7xl font-bold tracking-tighter mb-6">
-              Compra ahora.
-              <br />
-              <span className="text-pink-500">Paga después.</span>
+    <div className="min-h-screen bg-[#F8FAFC] text-slate-900 font-sans">
+      
+      {/* --- HERO SECTION --- */}
+      <header className="relative overflow-hidden bg-white pb-20 pt-24 lg:pt-32">
+        {/* Fondo decorativo */}
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-full max-w-7xl opacity-30 pointer-events-none">
+            <div className="absolute top-20 right-0 w-96 h-96 bg-indigo-300 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob"></div>
+            <div className="absolute top-20 left-0 w-96 h-96 bg-pink-300 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob animation-delay-2000"></div>
+        </div>
+
+        <div className="relative max-w-5xl mx-auto px-6 text-center">
+          <motion.div initial="hidden" animate="visible" variants={fadeInUp}>
+            <span className="inline-block py-1 px-3 rounded-full bg-indigo-50 border border-indigo-100 text-indigo-600 text-xs font-bold tracking-wider uppercase mb-4">
+              La nueva forma de comprar
+            </span>
+            <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight text-slate-900 mb-6">
+              Compra lo que amas. <br />
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-rose-500">
+                Paga a tu ritmo.
+              </span>
             </h1>
-            <p className="text-lg md:text-xl text-gray-600 max-w-lg mx-auto mb-8">
-              La forma inteligente de comprar. Divide tus pagos en cuotas sin interés en tus tiendas favoritas.
+            <p className="text-lg md:text-xl text-slate-500 mb-10 max-w-2xl mx-auto leading-relaxed">
+              Divide cualquier compra en 4 cuotas sin intereses o financia a largo plazo en tus tiendas favoritas. Sin sorpresas.
             </p>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Link to="./Shops.jsx" className="bg-black text-white font-semibold py-4 px-8 rounded-full hover:bg-gray-800 transition-colors duration-300 flex items-center justify-center gap-2">
-                Explorar tiendas
-                <ArrowRight size={20} />
-              </Link>
-              <Link to="/como-funciona" className="bg-gray-200 text-black font-semibold py-4 px-8 rounded-full hover:bg-gray-300 transition-colors duration-300 flex items-center justify-center">
-                Cómo funciona
-              </Link>
+            
+            {/* BARRA DE BÚSQUEDA PRINCIPAL */}
+            <div className="max-w-xl mx-auto relative group">
+              <div className="absolute -inset-1 bg-gradient-to-r from-indigo-500 to-pink-500 rounded-full blur opacity-25 group-hover:opacity-50 transition duration-200"></div>
+              <div className="relative bg-white rounded-full shadow-xl flex items-center p-2">
+                <Search className="text-slate-400 ml-4 w-6 h-6" />
+                <input 
+                  type="text"
+                  placeholder="Busca tiendas (ej. Nike, Apple)..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="w-full p-3 text-slate-700 outline-none bg-transparent placeholder:text-slate-400"
+                />
+                <button className="bg-slate-900 text-white px-6 py-2.5 rounded-full font-semibold hover:bg-slate-800 transition">
+                  Buscar
+                </button>
+              </div>
             </div>
-          </div>
-          <div className="lg:w-1/2 mt-12 lg:mt-0 flex justify-center">
-            <img 
-              src="https://images.unsplash.com/photo-1555529771-835f59fc5efe?q=80&w=1887&auto=format&fit=crop" 
-              alt="Mujer feliz comprando online" 
-              className="rounded-3xl w-full max-w-md shadow-2xl"
-            />
-          </div>
+          </motion.div>
         </div>
       </header>
 
-      {/* Why use BNPL Section */}
-       <section className="py-24">
-        <div className="w-full px-6 lg:px-8 grid md:grid-cols-2 gap-16 items-center">
-          <div className="text-center md:text-left">
-            <h2 className="text-4xl font-bold mb-6">¿Por qué elegir BNPL?</h2>
-            <p className="text-lg text-gray-500 mb-10">
-              Te damos el poder de comprar lo que amas hoy y pagar a tu ritmo, de forma transparente y segura.
-            </p>
-            <div className="space-y-8 max-w-md mx-auto md:mx-0">
-                {benefits.map(benefit => (
-                    <BenefitCard key={benefit.title} {...benefit} />
-                ))}
-            </div>
-          </div>
-          <div className="hidden md:flex justify-center">
-            <img 
-                src="https://images.unsplash.com/photo-1579389083395-4507e9d162c4?q=80&w=1887&auto=format&fit=crop"
-                alt="Persona usando su teléfono para pagar"
-                className="rounded-2xl shadow-xl w-full max-w-sm"
-            />
-          </div>
+      {/* --- CATEGORÍAS RÁPIDAS --- */}
+      <section className="py-8 border-b border-slate-100 bg-white/50 backdrop-blur-sm sticky top-[72px] z-10">
+        <div className="max-w-7xl mx-auto px-6 flex justify-center gap-4 md:gap-8 overflow-x-auto no-scrollbar">
+           {CATEGORIES.map((cat) => (
+             <button 
+               key={cat.name}
+               onClick={() => {
+                 setSearch(cat.name === "Variedades" ? "" : cat.name);
+                 // Aquí podrías activar un filtro real
+               }}
+               className="flex flex-col items-center gap-2 group min-w-[80px]"
+             >
+               <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-xl transition-transform group-hover:-translate-y-1 group-hover:shadow-md ${cat.color}`}>
+                 {cat.icon}
+               </div>
+               <span className="text-xs font-medium text-slate-600 group-hover:text-slate-900">{cat.name}</span>
+             </button>
+           ))}
         </div>
       </section>
 
-      {/* Favorite Brands Section */}
-      <main id="tiendas" className="bg-gray-50 py-20">
-        <div className="w-full px-6 lg:px-8">
-            <h2 className="text-4xl font-bold text-center mb-4">Paga con BNPL en tus marcas favoritas</h2>
-            <p className="text-lg text-gray-500 text-center mb-12">Desde moda hasta tecnología, encuentra todo lo que buscas.</p>
-
-            {filteredStores.length > 0 ? (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
-                {filteredStores.map((store) => (
-                <DynamicStoreCard key={store.id} {...store} />
-                ))}
-            </div>
-            ) : (
-            <p className="text-center text-gray-500 text-lg">No se encontraron tiendas.</p>
-            )}
+      {/* --- LISTADO DE TIENDAS (GRID) --- */}
+      <section className="py-16 max-w-7xl mx-auto px-6">
+        <div className="flex justify-between items-end mb-8">
+          <div>
+            <h2 className="text-2xl font-bold text-slate-900">Tiendas Destacadas</h2>
+            <p className="text-slate-500">Explora las marcas donde puedes usar tu crédito.</p>
+          </div>
+          <Link to="/tienda" className="text-indigo-600 font-semibold hover:underline hidden md:inline-block">
+            Ver directorio completo &rarr;
+          </Link>
         </div>
-      </main>
 
-      {/* Search Section */}
-      <section className="py-20">
-        <div className="w-full px-6 lg:px-8 text-center">
-          <h2 className="text-4xl font-bold mb-4">Encuentra tu tienda favorita</h2>
-          <p className="text-lg text-gray-500 mb-8 max-w-2xl mx-auto">
-            Escribe el nombre de la tienda que buscas y te llevaremos directamente.
-          </p>
-          <form 
-            onSubmit={handleStoreSearchSubmit} 
-            className="max-w-xl mx-auto flex flex-col sm:flex-row gap-4"
-          >
-            <input
-                type="text"
-                value={storeSearch}
-                onChange={(e) => setStoreSearch(e.target.value)}
-                placeholder="Ej: Amazon, Nike, Apple..."
-                className="w-full bg-gray-100 border-2 border-transparent rounded-full py-4 px-6 text-lg focus:outline-none focus:ring-2 focus:ring-pink-400 transition"
-            />
+        {loading ? (
+           <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+             {[1,2,3,4].map(i => (
+               <div key={i} className="h-64 bg-slate-200 rounded-3xl animate-pulse"></div>
+             ))}
+           </div>
+        ) : filteredStores.length > 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {filteredStores.map((store) => (
+              <Link 
+                to={`/tiendas/${store.id}`} 
+                key={store.id}
+                className="group relative bg-white rounded-3xl border border-slate-100 overflow-hidden hover:shadow-2xl hover:shadow-slate-200/50 transition-all duration-300 flex flex-col"
+              >
+                {/* Banner imagen */}
+                <div className="h-32 bg-slate-100 relative overflow-hidden">
+                  <img 
+                    src={`https://placehold.co/600x300/f1f5f9/94a3b8?text=${store.name}`} 
+                    alt="banner" 
+                    className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                  />
+                  {/* Logo Flotante */}
+                  <div className="absolute -bottom-6 left-6 w-16 h-16 rounded-xl bg-white p-1 shadow-md">
+                     <img 
+                        src={store.logo || store.logo_url || "https://placehold.co/100"} 
+                        alt={store.name} 
+                        className="w-full h-full object-contain rounded-lg border border-slate-50"
+                     />
+                  </div>
+                </div>
+
+                <div className="pt-8 px-6 pb-6 flex-1 flex flex-col">
+                   <h3 className="text-lg font-bold text-slate-800 group-hover:text-indigo-600 transition-colors">
+                     {store.name}
+                   </h3>
+                   <p className="text-sm text-slate-400 mb-4 line-clamp-2">
+                     {store.description || "Compra ahora y paga después en cuotas flexibles."}
+                   </p>
+                   
+                   <div className="mt-auto pt-4 border-t border-slate-50 flex items-center justify-between">
+                      <div className="flex items-center gap-1 text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded">
+                        <Zap size={12} fill="currentColor" /> 0% Interés
+                      </div>
+                      <div className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                        <ArrowRight size={16} />
+                      </div>
+                   </div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-20 bg-white rounded-3xl border border-dashed border-slate-200">
+            <ShoppingBag className="mx-auto h-12 w-12 text-slate-300 mb-3" />
+            <p className="text-slate-500">No encontramos tiendas con ese nombre.</p>
             <button 
-                type="submit" 
-                className="bg-black text-white font-semibold py-4 px-8 rounded-full hover:bg-gray-800 transition-colors duration-300 flex items-center justify-center gap-2"
+              onClick={() => setSearch("")}
+              className="mt-4 text-indigo-600 font-semibold hover:underline"
             >
-                <Search size={20} />
-                <span>Buscar</span>
+              Limpiar búsqueda
             </button>
-          </form>
+          </div>
+        )}
+      </section>
+
+      {/* --- BENEFICIOS (CÓMO FUNCIONA) --- */}
+      <section className="bg-slate-900 text-white py-20">
+        <div className="max-w-7xl mx-auto px-6">
+          <div className="text-center mb-16">
+            <h2 className="text-3xl md:text-4xl font-bold mb-4">¿Por qué usar BNPL?</h2>
+            <p className="text-slate-400 max-w-2xl mx-auto">
+              Te damos el poder financiero para obtener lo que necesitas hoy, sin comprometer tu presupuesto de mañana.
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-10">
+            <FeatureCard 
+              icon={<CreditCard className="text-pink-400" size={32} />}
+              title="Sin sorpresas"
+              desc="Lo que ves es lo que pagas. Sin comisiones ocultas ni letras pequeñas."
+            />
+            <FeatureCard 
+              icon={<TrendingUp className="text-indigo-400" size={32} />}
+              title="Construye Crédito"
+              desc="Paga a tiempo y aumenta tu límite de crédito automáticamente con nuestra gamificación."
+            />
+            <FeatureCard 
+              icon={<ShieldCheck className="text-emerald-400" size={32} />}
+              title="Seguridad Total"
+              desc="Tus compras están protegidas. Si algo sale mal, pausamos tus pagos hasta resolverlo."
+            />
+          </div>
         </div>
       </section>
 
-      {/* Footer */}
-      <footer className="bg-black text-white">
-        <div className="w-full px-6 lg:px-8 py-12 text-center text-gray-400">
-          <p>© {new Date().getFullYear()} BNPL Inc. Todos los derechos reservados.</p>
-          <div className="flex justify-center gap-6 mt-4">
-            <Link to="/privacy" className="hover:text-pink-400">Política de Privacidad</Link>
-            <Link to="/terms" className="hover:text-pink-400">Términos de Uso</Link>
-          </div>
+      {/* --- CALL TO ACTION --- */}
+      <section className="py-20 bg-gradient-to-br from-indigo-50 to-white">
+        <div className="max-w-4xl mx-auto text-center px-6">
+          <h2 className="text-3xl md:text-5xl font-bold text-slate-900 mb-6">
+            ¿Tienes un negocio?
+          </h2>
+          <p className="text-lg text-slate-600 mb-8">
+            Únete a las cientos de tiendas que están aumentando sus ventas ofreciendo BNPL a sus clientes.
+          </p>
+          <Link 
+            to="/quiero-ser-tienda-bnpl"
+            className="inline-flex items-center justify-center gap-2 bg-slate-900 text-white px-8 py-4 rounded-full font-bold text-lg hover:bg-indigo-600 transition shadow-xl hover:shadow-2xl hover:-translate-y-1"
+          >
+            Convertirme en Partner <ArrowRight />
+          </Link>
         </div>
+      </section>
+
+      {/* --- FOOTER SIMPLE --- */}
+      <footer className="bg-white py-10 border-t border-slate-100 text-center text-slate-400 text-sm">
+        <p>© {new Date().getFullYear()} BNPL Platform. Todos los derechos reservados.</p>
       </footer>
     </div>
   );
 }
 
+// Subcomponente para Features
+function FeatureCard({ icon, title, desc }) {
+  return (
+    <div className="bg-white/5 p-8 rounded-3xl border border-white/10 hover:bg-white/10 transition duration-300">
+      <div className="mb-6 bg-slate-800 w-16 h-16 rounded-2xl flex items-center justify-center">
+        {icon}
+      </div>
+      <h3 className="text-xl font-bold mb-3">{title}</h3>
+      <p className="text-slate-400 leading-relaxed">{desc}</p>
+    </div>
+  );
+}

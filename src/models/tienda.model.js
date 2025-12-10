@@ -1,3 +1,4 @@
+// src/models/tienda.model.js
 export default (sequelize, DataTypes) => {
   const Tienda = sequelize.define('Tienda', {
     id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },

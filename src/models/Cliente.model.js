@@ -1,3 +1,4 @@
+
 export default (sequelize, DataTypes) => {
   const Cliente = sequelize.define(
     "Cliente",

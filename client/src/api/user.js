@@ -1,3 +1,5 @@
+// client/src/api/user.js
+
 import axios from "./axios";
 
 const PREFIX = "/admin/usuarios";

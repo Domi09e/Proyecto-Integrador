@@ -1,3 +1,4 @@
+// src/models/auditoria_tienda.model.js
 export default (sequelize, DataTypes) => {
   const AuditoriaTiendas = sequelize.define("AuditoriaTiendas", {
     id: { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },

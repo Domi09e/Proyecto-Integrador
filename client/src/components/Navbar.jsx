@@ -1,3 +1,5 @@
+// client/src/components/Navbar.jsx
+
 import { Link, Outlet, useNavigate } from "react-router-dom";
 // Corregido: Se usan rutas absolutas desde la carpeta 'src' para evitar problemas de resolución.
 import { useAuth } from "/src/context/authContext";
@@ -27,6 +29,7 @@ export default function Navbar() {
   const menuItems = [
     { label: "Descubrir BNPL", path: "/descubrir" },
     { label: "Cartera", path: "/cartera" },
+    { label: "Dividir Cuenta", path: "/split", isNew: true },
     { label: "Pagos", path: "/pagos" },
     { label: "Tienda", path: "/tienda" },
     { label: "Atención al cliente", path: "/soporte" },

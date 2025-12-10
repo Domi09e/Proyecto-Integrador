@@ -1,3 +1,4 @@
+// client/src/admin/settings/ConfigPage.jsx
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAdminAuth } from "../context/adminAuth.context";

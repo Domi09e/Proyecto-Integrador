@@ -1,3 +1,5 @@
+// client/src/pages/partnerRequest.jsx
+
 import { useState } from "react";
 import axios from "../api/axios";
 import { useAuth } from "../context/authContext";

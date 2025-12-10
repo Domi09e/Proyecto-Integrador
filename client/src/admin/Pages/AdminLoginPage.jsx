@@ -1,3 +1,4 @@
+// client/src/admin/Pages/AdminLoginPage.jsx
 import { useEffect, useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAdminAuth } from "../context/adminAuth.context";

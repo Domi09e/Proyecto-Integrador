@@ -1,3 +1,4 @@
+// src/controllers/auth.controller.js
 import db from "../models/index.js";
 import bcrypt from "bcryptjs";
 import { createAccessToken } from "../libs/jwt.js";
@@ -112,18 +113,35 @@ export const login = async (req, res) => {
 
 // GET /api/auth/verify (para clientes)
 export const verifyToken = async (req, res) => {
-  const clienteFound = await Cliente.findByPk(req.cliente.id);
-  if (!clienteFound) return res.status(401).json({ message: "Unauthorized" });
+  try {
+    // 👇 tomamos el id que el middleware guardó
+    const clienteId =
+      req.cliente?.id ||      // si tu middleware usa req.cliente
+      req.user?.id ||         // o req.user
+      req.userId || null;     // o req.userId
 
-  return res.json({
-    id: clienteFound.id,
-    nombre: clienteFound.nombre,
-    apellido: clienteFound.apellido,
-    email: clienteFound.email,
-    telefono: clienteFound.telefono,
-    address: clienteFound.address,
-    poder_credito: clienteFound.poder_credito,
-  });
+    if (!clienteId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    const clienteFound = await Cliente.findByPk(clienteId);
+    if (!clienteFound) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    return res.json({
+      id: clienteFound.id,
+      nombre: clienteFound.nombre,
+      apellido: clienteFound.apellido,
+      email: clienteFound.email,
+      telefono: clienteFound.telefono,
+      address: clienteFound.address,
+      poder_credito: clienteFound.poder_credito,
+    });
+  } catch (error) {
+    console.error("Error verifyToken cliente:", error);
+    return res.status(500).json({ message: error.message });
+  }
 };
 
 export const logout = (req, res) => {

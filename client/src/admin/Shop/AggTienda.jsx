@@ -1,3 +1,4 @@
+// client/src/admin/Shop/AggTienda.jsx
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { createStore, createStoreWithFile } from "../../api/stores";

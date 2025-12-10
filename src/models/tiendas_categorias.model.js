@@ -1,12 +1,22 @@
+// src/models/tiendas_categorias.model.js
+
 export default (sequelize, DataTypes) => {
   const TiendasCategorias = sequelize.define("TiendasCategorias", {
-    id: { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
-    tienda_id: { type: DataTypes.INTEGER, allowNull: false },
-    categoria_id: { type: DataTypes.INTEGER, allowNull: false },
+    // Si tu tabla en la BD no tiene columna 'id' autoincremental y usa clave compuesta,
+    // definimos las claves foráneas como Primary Key para que Sequelize entienda.
+    tienda_id: { 
+      type: DataTypes.INTEGER, 
+      allowNull: false,
+      primaryKey: true // Parte de la clave primaria compuesta
+    },
+    categoria_id: { 
+      type: DataTypes.INTEGER, 
+      allowNull: false,
+      primaryKey: true // Parte de la clave primaria compuesta
+    },
   }, {
-    tableName: "Tiendas_Categorias",
+    tableName: "tiendascategorias", // 👈 ¡AQUÍ ESTABA EL ERROR! (Sin guion bajo)
     timestamps: false,
-    indexes: [{ unique: true, fields: ["tienda_id","categoria_id"] }],
   });
   return TiendasCategorias;
 };

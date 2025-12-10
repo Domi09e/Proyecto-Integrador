@@ -1,3 +1,5 @@
+// client/src/context/authContext.jsx
+
 import { useEffect } from "react";
 import { createContext, useContext, useState } from "react";
 import { loginRequest, registerRequest, verifyTokenRequest } from "../api/auth";

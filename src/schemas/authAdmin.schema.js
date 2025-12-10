@@ -1,3 +1,5 @@
+// src/schemas/authAdmin.schema.js
+
 import { z } from "zod";
 
 const email = z.string().trim().toLowerCase().email({ message: "Email no válido" });

@@ -1,22 +1,49 @@
-// src/pages/StoreDetail.jsx
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { fetchPublicStores } from "../api/stores";
-import { ArrowLeft, ExternalLink, CreditCard } from "lucide-react";
+import api from "../api/axios";
+import { ArrowLeft, ExternalLink, Star, MapPin, Truck, ShieldCheck, ShoppingCart, Trash2, Plus } from "lucide-react";
+import { useAuth } from "../context/authContext";
+import CheckoutModal from "../components/checkoutModal";
+
+// Generador de productos falsos (Vitrina)
+const getMockProducts = (storeName) => {
+  return Array.from({ length: 6 }).map((_, i) => ({
+    id: i,
+    name: `Producto ${storeName} ${i + 1}`,
+    price: parseFloat((Math.random() * 5000 + 1500).toFixed(2)), // Precio numérico
+    image: `https://placehold.co/300x300/e2e8f0/1e293b?text=Item+${i+1}`
+  }));
+};
 
 export default function StoreDetailPage() {
   const { id } = useParams();
+  const navigate = useNavigate();
+  const { isAuthenticated } = useAuth();
+  
   const [store, setStore] = useState(null);
+  const [credit, setCredit] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  
+  // --- NUEVO: ESTADO DEL CARRITO ---
+  const [cart, setCart] = useState([]); 
+  const [showCheckout, setShowCheckout] = useState(false);
 
   useEffect(() => {
     const load = async () => {
       try {
         setLoading(true);
-        setError("");
-        const data = await fetchPublicStores(id); // GET /api/tiendas/:id
-        setStore(data);
+        const storeData = await fetchPublicStores();
+        const found = Array.isArray(storeData) ? storeData.find(s => s.id == id) : storeData;
+        
+        if (!found) throw new Error("Tienda no encontrada");
+        setStore(found);
+
+        if (isAuthenticated) {
+          const { data: profile } = await api.get("/client/profile");
+          setCredit(Number(profile.poder_credito));
+        }
       } catch (e) {
         console.error(e);
         setError("No se pudo cargar la tienda.");
@@ -25,166 +52,203 @@ export default function StoreDetailPage() {
       }
     };
     load();
-  }, [id]);
+  }, [id, isAuthenticated]);
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-200">
-        Cargando tienda…
-      </div>
-    );
-  }
+  // --- FUNCIONES DEL CARRITO ---
+  const addToCart = (product) => {
+    setCart(prev => [...prev, product]);
+  };
 
-  if (error) {
-    return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-slate-100">
-        <p className="mb-4 text-red-400">{error}</p>
-        <Link
-          to="/tienda"
-          className="inline-flex items-center gap-2 rounded-full border border-slate-700 px-4 py-2 text-sm hover:bg-slate-800"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Volver a tiendas
-        </Link>
-      </div>
-    );
-  }
+  const removeFromCart = (indexToRemove) => {
+    setCart(prev => prev.filter((_, index) => index !== indexToRemove));
+  };
 
-  // 🔐 Aquí ya estamos seguros de que store existe
-  const name = store.name || store.nombre || "Tienda";
-  const logo = store.logo || store.logo_url || "";
-  const description = store.description || store.descripcion || "";
-  const website = store.website || store.sitio_web || "";
-  const telefono = store.telefono || "";
-  const email = store.email || store.email_corporativo || "";
-  const direccion = store.direccion || "";
-  const initial = name.charAt(0).toUpperCase(); // AQUÍ ya NO es undefined
+  const cartTotal = cart.reduce((acc, item) => acc + item.price, 0);
+
+  const handleCheckoutClick = () => {
+    if (!isAuthenticated) {
+      navigate("/login");
+      return;
+    }
+    if (cart.length === 0) {
+      alert("Tu carrito está vacío.");
+      return;
+    }
+    setShowCheckout(true);
+  };
+
+  if (loading) return <div className="min-h-screen bg-slate-50 flex items-center justify-center">Cargando...</div>;
+  if (error || !store) return <div className="min-h-screen bg-slate-50 flex items-center justify-center text-red-500">{error}</div>;
+
+  const mockProducts = getMockProducts(store.nombre || store.name);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-50">
-      <div className="max-w-6xl mx-auto px-4 py-6">
-        {/* Back */}
-        <div className="mb-4">
-          <Link
-            to="/tiendas"
-            className="inline-flex items-center gap-2 text-sm text-slate-300 hover:text-teal-300"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            Volver a tiendas
-          </Link>
-        </div>
-
-        {/* Header tienda (similar Klarna) */}
-        <div className="rounded-3xl bg-gradient-to-r from-slate-900 to-slate-800 border border-slate-800 p-6 mb-6 flex flex-col md:flex-row gap-5 items-start">
-          <div className="flex items-center gap-4">
-            {logo ? (
-              <img
-                src={logo}
-                alt={name}
-                className="h-16 w-16 rounded-2xl bg-slate-900 object-cover border border-slate-700"
-              />
-            ) : (
-              <div className="h-16 w-16 rounded-2xl bg-slate-900 border border-slate-700 flex items-center justify-center text-2xl font-bold">
-                {initial}
-              </div>
-            )}
-
-            <div>
-              <h1 className="text-2xl md:text-3xl font-bold">{name}</h1>
-              <p className="text-sm text-slate-300 mt-1">
-                Paga con BNPL y divide tu compra en cuotas flexibles.
-              </p>
+    <div className="min-h-screen bg-slate-50 pb-20">
+      {/* 1. HERO BANNER */}
+      <div className="relative h-64 md:h-80 bg-slate-900 overflow-hidden">
+        <img 
+          src={`https://placehold.co/1200x400/0f172a/1e293b?text=${store.nombre || "Tienda"}`} 
+          alt="Cover" 
+          className="w-full h-full object-cover opacity-50"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-slate-900 to-transparent" />
+        
+        <div className="absolute bottom-0 left-0 w-full p-6 md:p-10 max-w-7xl mx-auto flex items-end gap-6">
+          <img 
+            src={store.logo_url || store.logo || "https://placehold.co/100"} 
+            alt="Logo" 
+            className="w-24 h-24 md:w-32 md:h-32 rounded-2xl border-4 border-slate-50 shadow-xl bg-white object-contain"
+          />
+          <div className="text-white mb-2">
+            <h1 className="text-3xl md:text-5xl font-bold">{store.nombre || store.name}</h1>
+            <div className="flex items-center gap-4 mt-2 text-sm md:text-base text-slate-300">
+              <span className="flex items-center gap-1"><Star size={16} className="text-yellow-400 fill-yellow-400"/> 4.8</span>
+              <span>•</span>
+              <span>{store.category || "General"}</span>
             </div>
-          </div>
-
-          {website && (
-            <div className="md:ml-auto flex flex-col items-stretch gap-2 w-full md:w-auto">
-              <a
-                href={website}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center justify-center gap-2 rounded-full bg-white text-slate-900 text-sm font-semibold px-4 py-2 hover:bg-slate-100"
-              >
-                Ir al website
-                <ExternalLink className="w-4 h-4" />
-              </a>
-              <span className="text-xs text-slate-400 text-center">
-                Simulación: checkout con opción BNPL.
-              </span>
-            </div>
-          )}
-        </div>
-
-        {/* Layout 2 columnas: info + simulador BNPL (placeholder) */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {/* Columna izquierda: info tienda */}
-          <div className="md:col-span-2 space-y-4">
-            <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-300 mb-2">
-                Sobre la tienda
-              </h2>
-              <p className="text-sm text-slate-200">
-                {description ||
-                  "Tienda afiliada al ecosistema BNPL donde puedes realizar compras y pagarlas en cuotas según tu límite de crédito disponible."}
-              </p>
-            </section>
-
-            <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-300 mb-3">
-                Información de contacto
-              </h2>
-              <ul className="text-sm space-y-1 text-slate-200">
-                {direccion && <li>📍 {direccion}</li>}
-                {telefono && <li>📞 {telefono}</li>}
-                {email && <li>✉️ {email}</li>}
-                {website && <li>🌐 {website}</li>}
-              </ul>
-            </section>
-          </div>
-
-          {/* Columna derecha: resumen BNPL / CTA */}
-          <div className="space-y-4">
-            <section className="rounded-2xl border border-teal-600/60 bg-slate-900 p-5 shadow-lg shadow-teal-900/40">
-              <div className="flex items-center gap-2 mb-3">
-                <div className="h-8 w-8 rounded-full bg-teal-500/20 flex items-center justify-center">
-                  <CreditCard className="w-4 h-4 text-teal-300" />
-                </div>
-                <h2 className="text-sm font-semibold text-slate-50">
-                  Paga con BNPL
-                </h2>
-              </div>
-              <p className="text-xs text-slate-300 mb-3">
-                En el checkout de esta tienda podrás elegir{" "}
-                <span className="font-semibold text-teal-300">
-                  BNPL como método de pago
-                </span>{" "}
-                y dividir el total en cuotas mensuales, siempre que tengas
-                crédito disponible.
-              </p>
-              <ul className="text-xs text-slate-300 space-y-1 mb-3">
-                <li>• 3, 6 o 12 cuotas (según monto y perfil).</li>
-                <li>• Notificaciones antes de cada vencimiento.</li>
-                <li>• Visualización de tus cuotas en el panel de cliente.</li>
-              </ul>
-              <button
-                type="button"
-                className="w-full rounded-full bg-teal-500 text-slate-900 text-sm font-semibold py-2.5 hover:bg-teal-400"
-              >
-                Simular compra con BNPL
-              </button>
-            </section>
-
-            <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 text-xs text-slate-400">
-              Más adelante aquí conectaremos:
-              <ul className="list-disc list-inside mt-1 space-y-1">
-                <li>Generación de factura BNPL.</li>
-                <li>Registro automático de cuotas.</li>
-                <li>Notificaciones a administradores y cliente.</li>
-              </ul>
-            </section>
           </div>
         </div>
       </div>
+
+      <div className="max-w-7xl mx-auto px-4 py-8 grid grid-cols-1 lg:grid-cols-3 gap-8">
+        
+        {/* 2. VITRINA DE PRODUCTOS */}
+        <div className="lg:col-span-2 space-y-8">
+          <div className="flex gap-4 overflow-x-auto pb-2">
+            <Badge icon={<Truck size={14}/>} text="Envío Gratis" />
+            <Badge icon={<ShieldCheck size={14}/>} text="Garantía Oficial" />
+          </div>
+
+          <div>
+            <h2 className="text-2xl font-bold text-slate-800 mb-6">Catálogo Disponible</h2>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              {mockProducts.map((prod) => (
+                <div key={prod.id} className="group bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-lg transition overflow-hidden flex flex-col">
+                  <div className="aspect-square bg-slate-100 relative overflow-hidden">
+                    <img src={prod.image} alt={prod.name} className="w-full h-full object-cover group-hover:scale-105 transition duration-500"/>
+                    
+                    {/* Botón Flotante Agregar */}
+                    <button 
+                      onClick={() => addToCart(prod)}
+                      className="absolute bottom-3 right-3 bg-white p-2.5 rounded-full shadow-lg hover:bg-emerald-500 hover:text-white text-emerald-600 transition translate-y-10 group-hover:translate-y-0"
+                      title="Agregar al carrito"
+                    >
+                      <Plus size={20} />
+                    </button>
+                  </div>
+                  <div className="p-4 flex flex-col flex-grow">
+                    <h3 className="font-semibold text-slate-800 text-sm truncate">{prod.name}</h3>
+                    <p className="text-emerald-600 font-bold mt-1">RD$ {prod.price.toLocaleString()}</p>
+                    <p className="text-[10px] text-slate-400 mt-auto pt-2">
+                      4 cuotas de RD$ {(prod.price/4).toFixed(2)}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* 3. CARRITO LATERAL (STICKY) */}
+        <div className="lg:col-span-1">
+          <div className="sticky top-24 space-y-6">
+            
+            {/* Resumen del Carrito */}
+            <div className="bg-white rounded-3xl shadow-xl border border-slate-100 overflow-hidden">
+              <div className="bg-slate-900 p-4 text-white flex justify-between items-center">
+                <h3 className="font-bold flex items-center gap-2">
+                  <ShoppingCart size={18} /> Tu Carrito simulado
+                </h3>
+                <span className="bg-white/20 px-2 py-0.5 rounded text-xs font-bold">{cart.length} ítems</span>
+              </div>
+
+              <div className="p-4 max-h-60 overflow-y-auto space-y-3">
+                {cart.length === 0 ? (
+                  <p className="text-center text-sm text-slate-400 py-4">El carrito está vacío.</p>
+                ) : (
+                  cart.map((item, idx) => (
+                    <div key={idx} className="flex justify-between items-center text-sm">
+                      <div>
+                        <p className="text-slate-700 font-medium truncate w-40">{item.name}</p>
+                        <p className="text-xs text-slate-400">RD$ {item.price.toLocaleString()}</p>
+                      </div>
+                      <button 
+                        onClick={() => removeFromCart(idx)} 
+                        className="text-red-400 hover:text-red-600 p-1"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <div className="p-4 bg-slate-50 border-t border-slate-100">
+                <div className="flex justify-between items-center mb-4">
+                  <span className="text-slate-600 font-medium">Total:</span>
+                  <span className="text-xl font-bold text-slate-900">RD$ {cartTotal.toLocaleString()}</span>
+                </div>
+
+                {isAuthenticated && credit !== null && (
+                  <div className="mb-4 text-xs text-center">
+                    <span className={cartTotal > credit ? "text-red-500 font-bold" : "text-emerald-600"}>
+                      Crédito disponible: RD$ {credit.toLocaleString()}
+                    </span>
+                  </div>
+                )}
+
+                <button
+                  onClick={handleCheckoutClick}
+                  disabled={cart.length === 0}
+                  className="w-full py-3 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-500 transition shadow-lg shadow-emerald-200 transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Pagar con BNPL
+                </button>
+              </div>
+            </div>
+
+            {/* Info Tienda */}
+            <div className="bg-white rounded-3xl border border-slate-100 p-6">
+              <h4 className="font-bold text-slate-800 mb-4">Información</h4>
+              <ul className="space-y-3 text-sm text-slate-600">
+                <li className="flex gap-3">
+                  <MapPin size={18} className="text-slate-400 shrink-0"/> 
+                  {store.direccion || "Ubicación no disponible"}
+                </li>
+                {store.sitio_web && (
+                  <li className="flex gap-3">
+                    <ExternalLink size={18} className="text-slate-400 shrink-0"/>
+                    <a href={store.sitio_web} target="_blank" rel="noreferrer" className="text-emerald-600 hover:underline truncate">
+                      Visitar sitio web
+                    </a>
+                  </li>
+                )}
+              </ul>
+            </div>
+
+            <Link to="/tienda" className="flex items-center justify-center gap-2 text-sm text-slate-500 hover:text-emerald-600 transition py-2">
+              <ArrowLeft size={16} /> Volver al directorio
+            </Link>
+
+          </div>
+        </div>
+      </div>
+
+      {showCheckout && (
+        <CheckoutModal 
+          tienda={store} 
+          initialAmount={cartTotal} // <--- PASAMOS EL TOTAL DEL CARRITO
+          onClose={() => setShowCheckout(false)} 
+        />
+      )}
+    </div>
+  );
+}
+
+function Badge({ icon, text }) {
+  return (
+    <div className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-200 rounded-full text-xs font-semibold text-slate-600 shadow-sm whitespace-nowrap">
+      {icon} {text}
     </div>
   );
 }

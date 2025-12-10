@@ -1,3 +1,5 @@
+// client/src/App.jsx
+
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "./context/authContext";
 import { ProtectedRoute } from "./routes";
@@ -14,6 +16,7 @@ import AggTienda from "./admin/Shop/AggTienda.jsx";
 import ClientsPage from "./admin/clients/clients.jsx";
 import PartnerRequestPage from "./pages/partnerRequest.jsx";
 import StoreDetailPage from "./pages/StoreDetail.jsx";
+import SplitPayment from "./pages/SplitPayments";
 
 function App() {
   return (
@@ -22,12 +25,12 @@ function App() {
         <Routes>
           <Route path="/admin/*" element={<AdminRoutes />} />
           <Route path="/AggTienda" element={<AggTienda />} />
-          <Route path="/clientes" element={<ClientsPage />} />
           
           {/* Rutas protegidas */}
           <Route element={<ProtectedRoute />}>
             <Route path="/dashboard" element={<h1>Dashboard</h1>} />
             <Route path="/cartera" element={<Cartera />} />
+            <Route path="/split" element={<SplitPayment />} />
             <Route path="/pagos" element={<Pagos />} />
           </Route>
           {/* Rutas con layout (Navbar) */}

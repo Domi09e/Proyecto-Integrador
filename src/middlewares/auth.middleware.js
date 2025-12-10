@@ -1,3 +1,4 @@
+// src/middlewares/auth.middleware.js
 import jwt from "jsonwebtoken";
 import { TOKEN_SECRET } from "../config.js";
 import db from '../models/index.js';

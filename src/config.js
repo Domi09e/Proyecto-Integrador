@@ -1,3 +1,5 @@
+// src/config.js
+
 export const PORT = process.env.PORT || 4000;
 export const TOKEN_SECRET = process.env.TOKEN_SECRET || "super_secret_key_change_me";
 

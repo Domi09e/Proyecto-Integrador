@@ -1,3 +1,5 @@
+// client/src/admin/context/adminAuth.context.jsx
+
 import { createContext, useContext, useEffect, useState } from "react";
 import {
   adminRegisterApi,

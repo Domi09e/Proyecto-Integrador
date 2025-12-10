@@ -15,6 +15,13 @@ import AURoutes from "./routes/AU.routes.js";
 import tiendaRoutes from "./routes/tienda.routes.js";
 import categoryRoutes from "./routes/category.routes.js";
 import partnerRoutes from "./routes/partner.routes.js";
+import adminNotificationsRoutes from "./routes/AN.routes.js";
+import adminDocsRoutes from "./routes/admin.documents.routes.js";
+import adminGroupsRoutes from "./routes/admin.groups.routes.js";
+import adminPaymentsRoutes from "./routes/admin.payments.routes.js";
+import adminDashboardRoutes from "./routes/admin.dashboard.routes.js"; 
+import adminSupportRoutes from "./routes/admin.support.routes.js";
+import adminAuditRoutes from "./routes/admin.audit.routes.js";
 
 const app = express();
 
@@ -35,6 +42,13 @@ app.use("/api", AURoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/admin/auth", adminAuthRoutes);
 app.use("/api/admin", adminStoresRoutes);
+app.use("/api/admin", adminNotificationsRoutes);
+app.use("/api/admin", adminDocsRoutes);
+app.use("/api/admin", adminGroupsRoutes);
+app.use("/api/admin", adminPaymentsRoutes);
+app.use("/api/admin", adminDashboardRoutes);
+app.use("/api/admin", adminSupportRoutes);
+app.use("/api/admin", adminAuditRoutes);
 
 // 🔥 ESTAS SON LAS RUTAS QUE EL FRONT NECESITA
 app.use("/api/tiendas", tiendaRoutes);
