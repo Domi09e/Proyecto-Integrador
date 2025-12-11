@@ -30,6 +30,7 @@ import {
   createTicket,
   getMyTickets,
 } from "../controllers/support.controller.js";
+import { verificarDeudaCritica } from "../middlewares/BloqueoDeudas.middleware.js";
 
 // ... tus otras rutas ...
 const router = Router();

@@ -3,6 +3,32 @@ import { logAction } from "../services/audit.services.js"; // 👈 IMPORTANTE: S
 
 const { Cliente } = db;
 
+/* =================================================
+   OBTENER TODOS LOS CLIENTES (Para la tabla de Admin)
+   ================================================= */
+export const getClients = async (req, res) => {
+  try {
+    const clients = await Cliente.findAll({
+      attributes: [
+        "id", 
+        "nombre", 
+        "apellido", 
+        "email", 
+        "telefono", 
+        "poder_credito", 
+        "activo", // 👈 ¡ESTA ES LA CLAVE! Si falta esto, el frontend cree que están bloqueados.
+        "createdAt" 
+      ],
+      order: [["createdAt", "DESC"]]
+    });
+    
+    res.json(clients);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Error al obtener la lista de clientes" });
+  }
+};
+
 // Editar Cliente (Ej: Aumentar crédito manual o cambiar datos)
 export const updateClientAdmin = async (req, res) => {
   try {

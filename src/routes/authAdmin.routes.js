@@ -15,6 +15,9 @@ import {
   loginAdminSchema as adminLoginSchema,
   registerAdminSchema as adminRegisterSchema,
 } from "../schemas/authAdmin.schema.js";
+import { getRiskConfig, updateRiskConfig } from "../controllers/risk.controller.js";
+import { ejecutarAuditoriaManual } from "../cron/cron.services.js";
+
 
 const r = Router();
 
@@ -30,6 +33,14 @@ r.post("/logout", requireAdmin, logoutAdmin);
 r.get("/finanzas", requireAdmin, requireRol("finanzas"), (req, res) =>
   res.json({ ok: true })
 );
+
+// ... dentro de tus rutas protegidas ...
+r.get("/risk-config", getRiskConfig);
+r.put("/risk-config", updateRiskConfig);
+r.get("/test-bloqueo-masivo", async (req, res) => {
+    const resultado = await ejecutarAuditoriaManual();
+    res.json(resultado);
+});
 
 
 export default r;

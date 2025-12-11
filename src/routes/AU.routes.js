@@ -3,14 +3,14 @@
 import { Router } from "express";
 import { requireAdmin } from "../middlewares/requireAdmin.middleware.js";
 import db from "../models/index.js";
-import { updateClientAdmin, toggleBlockClient, deleteClientAdmin } from "../controllers/client_management.controller.js";
+import { getClients, updateClientAdmin, toggleBlockClient, deleteClientAdmin } from "../controllers/client_management.controller.js";
 
 
 const router = Router();
 const { Usuario, Cliente, PagoBNPL, Cuota } = db;
 
 // ... tus otras rutas ...
-
+router.get("/clients", getClients);
 router.put("/admin/clientes/:id", requireAdmin, updateClientAdmin);
 router.post("/admin/clientes/:id/toggle-block", requireAdmin, toggleBlockClient);
 router.delete("/admin/clientes/:id", requireAdmin, deleteClientAdmin);

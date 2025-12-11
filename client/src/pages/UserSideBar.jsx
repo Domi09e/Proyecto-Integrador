@@ -24,10 +24,11 @@ import {
   RefreshCw,
   Gift,
   Star,
-  FileText,     // Necesario para docs
-  UploadCloud,  // Necesario para docs
-  Clock,        // Necesario para docs
-  AlertCircle   // Necesario para docs
+  FileText,     
+  UploadCloud,  
+  Clock,        
+  AlertCircle,
+  PiggyBank // <--- 1. NUEVO IMPORT
 } from "lucide-react";
 import { useAuth } from "../context/authContext";
 import api from "../api/axios";
@@ -53,7 +54,7 @@ export function ProfileSidebar({ user }) {
   const [paymentMethods, setPaymentMethods] = useState([]);
   const [paymentPreference, setPaymentPreference] = useState("4_quincenas");
   const [notifications, setNotifications] = useState([]);
-  const [docs, setDocs] = useState([]); // Si usas documentos
+  const [docs, setDocs] = useState([]); 
   const [notifUnread, setNotifUnread] = useState(0);
 
   const [loading, setLoading] = useState(false);
@@ -62,7 +63,7 @@ export function ProfileSidebar({ user }) {
 
   // Formulario Nuevo Método
   const [newMethod, setNewMethod] = useState({
-    tipo: "tarjeta", // Valor por defecto válido para la BD
+    tipo: "tarjeta", 
     marca: "",
     ultimos_cuatro_digitos: "",
     fecha_expiracion: "",
@@ -76,7 +77,7 @@ export function ProfileSidebar({ user }) {
     file: null,
   });
 
-  const [showAddForm, setShowAddForm] = useState(false); // Toggle para el formulario
+  const [showAddForm, setShowAddForm] = useState(false); 
 
   // Iniciales y Nombre
   const initialLetter = (user?.nombre || "?").charAt(0).toUpperCase();
@@ -109,12 +110,9 @@ export function ProfileSidebar({ user }) {
         setPaymentMethods(methodsRes.data);
         setPaymentPreference(prefRes.data?.preferencia_bnpl || "4_quincenas");
 
-        // ✅ CORRECCIÓN AQUÍ:
-        // Accedemos a .notifications dentro del objeto de respuesta
         const listaNotif = notifRes.data.notifications || [];
         setNotifications(listaNotif);
 
-        // Usamos unread_count si viene, o filtramos la lista correcta
         const unread =
           notifRes.data.unread_count ??
           listaNotif.filter((n) => n.is_new).length;
@@ -136,7 +134,7 @@ export function ProfileSidebar({ user }) {
     navigate("/");
   };
 
-  // --- Handler Documentos (RESTITUIDO) ---
+  // --- Handler Documentos ---
   const handleChangeNewDoc = (e) => {
     const { name, value, files } = e.target;
     if (files) {
@@ -167,9 +165,7 @@ export function ProfileSidebar({ user }) {
 
       setDocs((prev) => [data, ...prev]);
 
-      // Limpiar
       setNewDoc({ tipo_codigo: "CEDULA", numero_documento: "", file: null });
-      // Resetear el input file visualmente es dificil en React sin ref, pero el estado se limpia.
     } catch (err) {
       console.error(err);
       setErrorMsg(err.response?.data?.message || "Error al subir documento.");
@@ -184,7 +180,6 @@ export function ProfileSidebar({ user }) {
     setSaving(true);
     setErrorMsg("");
 
-    // Validación básica visual
     if (newMethod.ultimos_cuatro_digitos.length !== 4) {
       setErrorMsg("Deben ser exactamente 4 dígitos.");
       setSaving(false);
@@ -194,16 +189,13 @@ export function ProfileSidebar({ user }) {
     try {
       const payload = {
         ...newMethod,
-        // Aseguramos que se envíe 1 o 0 para booleanos en MySQL
         es_predeterminado: newMethod.es_predeterminado ? 1 : 0,
       };
 
       const { data } = await api.post("/client/payment-methods", payload);
 
-      // Actualizar la lista visualmente
       setPaymentMethods((prev) => [data, ...prev]);
 
-      // Limpiar formulario y cerrar toggle
       setNewMethod({
         tipo: "tarjeta",
         marca: "",
@@ -223,8 +215,6 @@ export function ProfileSidebar({ user }) {
   const handleSetDefault = async (id) => {
     try {
       const { data } = await api.put(`/client/payment-methods/${id}/default`);
-      // Actualizar localmente para respuesta inmediata en la UI
-      // Asumimos que el backend devuelve la lista completa o actualizamos manualmente
       const updated = paymentMethods.map((m) => ({
         ...m,
         es_predeterminado: m.id === id ? 1 : 0,
@@ -241,7 +231,6 @@ export function ProfileSidebar({ user }) {
       await api.put("/client/payment-preferences", {
         preferencia_bnpl: paymentPreference,
       });
-      // Feedback visual opcional
     } catch (err) {
       console.error(err);
     } finally {
@@ -263,7 +252,7 @@ export function ProfileSidebar({ user }) {
 
   const renderOverview = () => (
     <div className="p-6 space-y-6">
-      {/* Tarjeta de Crédito Disponible (Estilo Premium) */}
+      {/* Tarjeta de Crédito Disponible */}
       <div className="relative overflow-hidden bg-gradient-to-br from-indigo-600 to-purple-700 rounded-2xl p-6 text-white shadow-xl shadow-indigo-200 group transition-transform hover:scale-[1.02]">
         <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-10 -mt-10 blur-2xl"></div>
 
@@ -296,6 +285,16 @@ export function ProfileSidebar({ user }) {
           icon={<RefreshCw size={20} />}
           label="Preferencias de Pago"
           onClick={() => setActiveView(VIEWS.PAYMENT_PREFS)}
+        />
+        
+        {/* --- 2. NUEVO ITEM SNBL --- */}
+        <MenuItem
+          icon={<PiggyBank size={20} />}
+          label="Mis Metas SNBL"
+          onClick={() => {
+             navigate("/ahorros");
+             setOpen(false);
+          }}
         />
 
         <SectionHeader label="Cuenta" />
@@ -686,7 +685,7 @@ export function ProfileSidebar({ user }) {
     </div>
   );
 
-  // --- RENDERIZADOR: CUENTA Y DOCUMENTOS (AQUÍ ESTÁ LA INTEGRACIÓN) ---
+  // --- RENDERIZADOR: CUENTA Y DOCUMENTOS ---
   const renderAccountInfo = () => (
     <div className="p-6 space-y-6 text-gray-800 flex flex-col h-full overflow-y-auto no-scrollbar pb-20">
       <BackHeader

@@ -2,8 +2,12 @@ import { useParams, Link, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { fetchPublicStores } from "../api/stores";
 import api from "../api/axios";
-import { ArrowLeft, ExternalLink, Star, MapPin, Truck, ShieldCheck, ShoppingCart, Trash2, Plus } from "lucide-react";
+import { 
+  ArrowLeft, ExternalLink, Star, MapPin, Truck, ShieldCheck, 
+  ShoppingCart, Trash2, Plus, PiggyBank, X, Calendar, Check 
+} from "lucide-react";
 import { useAuth } from "../context/authContext";
+import { motion, AnimatePresence } from "framer-motion";
 import CheckoutModal from "../components/checkoutModal";
 
 // Generador de productos falsos (Vitrina)
@@ -11,7 +15,7 @@ const getMockProducts = (storeName) => {
   return Array.from({ length: 6 }).map((_, i) => ({
     id: i,
     name: `Producto ${storeName} ${i + 1}`,
-    price: parseFloat((Math.random() * 5000 + 1500).toFixed(2)), // Precio numérico
+    price: parseFloat((Math.random() * 15000 + 3500).toFixed(2)), // Precios un poco más realistas para metas
     image: `https://placehold.co/300x300/e2e8f0/1e293b?text=Item+${i+1}`
   }));
 };
@@ -26,9 +30,12 @@ export default function StoreDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   
-  // --- NUEVO: ESTADO DEL CARRITO ---
+  // --- ESTADO DEL CARRITO (BNPL) ---
   const [cart, setCart] = useState([]); 
   const [showCheckout, setShowCheckout] = useState(false);
+
+  // --- NUEVO: ESTADO PARA SNBL (AHORRO) ---
+  const [snblTarget, setSnblTarget] = useState(null); // Producto seleccionado para ahorrar
 
   useEffect(() => {
     const load = async () => {
@@ -66,18 +73,41 @@ export default function StoreDetailPage() {
   const cartTotal = cart.reduce((acc, item) => acc + item.price, 0);
 
   const handleCheckoutClick = () => {
-    if (!isAuthenticated) {
-      navigate("/login");
-      return;
-    }
-    if (cart.length === 0) {
-      alert("Tu carrito está vacío.");
-      return;
-    }
+    if (!isAuthenticated) { navigate("/login"); return; }
+    if (cart.length === 0) { alert("Tu carrito está vacío."); return; }
     setShowCheckout(true);
   };
 
-  if (loading) return <div className="min-h-screen bg-slate-50 flex items-center justify-center">Cargando...</div>;
+  // --- NUEVO: FUNCIONES SNBL ---
+  
+  // 1. Ahorrar para un solo producto (desde la vitrina)
+  const handleSnblSingle = (product) => {
+    if (!isAuthenticated) { 
+        if(window.confirm("Debes iniciar sesión para guardar una meta. ¿Ir al login?")) navigate("/login");
+        return; 
+    }
+    setSnblTarget(product); 
+  };
+
+  // 2. Ahorrar para TODO el carrito (desde el sidebar)
+  const handleSnblCart = () => {
+    if (!isAuthenticated) { 
+        if(window.confirm("Debes iniciar sesión para guardar una meta. ¿Ir al login?")) navigate("/login");
+        return; 
+    }
+    if (cart.length === 0) return;
+
+    // Creamos un objeto resumen que representa todo el carrito
+    const cartSummaryProduct = {
+        name: `Pack de ${cart.length} productos (${cart[0].name}...)`,
+        price: cartTotal,
+        image: cart[0].image // Usamos la imagen del primer producto como referencia
+    };
+    
+    setSnblTarget(cartSummaryProduct);
+  };
+
+  if (loading) return <div className="min-h-screen bg-slate-50 flex items-center justify-center"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-slate-900"></div></div>;
   if (error || !store) return <div className="min-h-screen bg-slate-50 flex items-center justify-center text-red-500">{error}</div>;
 
   const mockProducts = getMockProducts(store.nombre || store.name);
@@ -127,21 +157,39 @@ export default function StoreDetailPage() {
                   <div className="aspect-square bg-slate-100 relative overflow-hidden">
                     <img src={prod.image} alt={prod.name} className="w-full h-full object-cover group-hover:scale-105 transition duration-500"/>
                     
-                    {/* Botón Flotante Agregar */}
-                    <button 
-                      onClick={() => addToCart(prod)}
-                      className="absolute bottom-3 right-3 bg-white p-2.5 rounded-full shadow-lg hover:bg-emerald-500 hover:text-white text-emerald-600 transition translate-y-10 group-hover:translate-y-0"
-                      title="Agregar al carrito"
-                    >
-                      <Plus size={20} />
-                    </button>
+                    {/* Botones Flotantes */}
+                    <div className="absolute bottom-3 right-3 flex flex-col gap-2 translate-y-20 group-hover:translate-y-0 transition-transform duration-300">
+                        {/* Botón SNBL (Ahorro Individual) */}
+                        <button 
+                          onClick={() => handleSnblSingle(prod)}
+                          className="bg-white p-2.5 rounded-full shadow-lg hover:bg-indigo-600 hover:text-white text-indigo-600 transition flex items-center justify-center tooltip-trigger"
+                          title="Planear Compra (Ahorro)"
+                        >
+                          <PiggyBank size={20} />
+                        </button>
+
+                        {/* Botón Carrito (BNPL) */}
+                        <button 
+                          onClick={() => addToCart(prod)}
+                          className="bg-white p-2.5 rounded-full shadow-lg hover:bg-emerald-500 hover:text-white text-emerald-600 transition flex items-center justify-center"
+                          title="Agregar al carrito (BNPL)"
+                        >
+                          <Plus size={20} />
+                        </button>
+                    </div>
                   </div>
                   <div className="p-4 flex flex-col flex-grow">
                     <h3 className="font-semibold text-slate-800 text-sm truncate">{prod.name}</h3>
                     <p className="text-emerald-600 font-bold mt-1">RD$ {prod.price.toLocaleString()}</p>
-                    <p className="text-[10px] text-slate-400 mt-auto pt-2">
-                      4 cuotas de RD$ {(prod.price/4).toFixed(2)}
-                    </p>
+                    <div className="mt-auto pt-2 flex flex-col gap-1">
+                        <p className="text-[10px] text-slate-400">
+                          BNPL: 4 cuotas de RD$ {(prod.price/4).toFixed(2)}
+                        </p>
+                        {/* Etiqueta Visual SNBL */}
+                        <p className="text-[10px] text-indigo-400 font-medium flex items-center gap-1">
+                           <PiggyBank size={10}/> SNBL Disponible
+                        </p>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -157,7 +205,7 @@ export default function StoreDetailPage() {
             <div className="bg-white rounded-3xl shadow-xl border border-slate-100 overflow-hidden">
               <div className="bg-slate-900 p-4 text-white flex justify-between items-center">
                 <h3 className="font-bold flex items-center gap-2">
-                  <ShoppingCart size={18} /> Tu Carrito simulado
+                  <ShoppingCart size={18} /> Tu Carrito (BNPL)
                 </h3>
                 <span className="bg-white/20 px-2 py-0.5 rounded text-xs font-bold">{cart.length} ítems</span>
               </div>
@@ -183,8 +231,8 @@ export default function StoreDetailPage() {
                 )}
               </div>
 
-              <div className="p-4 bg-slate-50 border-t border-slate-100">
-                <div className="flex justify-between items-center mb-4">
+              <div className="p-4 bg-slate-50 border-t border-slate-100 space-y-3">
+                <div className="flex justify-between items-center mb-2">
                   <span className="text-slate-600 font-medium">Total:</span>
                   <span className="text-xl font-bold text-slate-900">RD$ {cartTotal.toLocaleString()}</span>
                 </div>
@@ -203,6 +251,15 @@ export default function StoreDetailPage() {
                   className="w-full py-3 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-500 transition shadow-lg shadow-emerald-200 transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Pagar con BNPL
+                </button>
+
+                {/* BOTÓN SNBL (CARRITO COMPLETO) */}
+                <button
+                  onClick={handleSnblCart}
+                  disabled={cart.length === 0}
+                  className="w-full py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-500 transition shadow-lg shadow-indigo-200 disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  <PiggyBank size={18}/> Planear Compra (Ahorro)
                 </button>
               </div>
             </div>
@@ -234,16 +291,31 @@ export default function StoreDetailPage() {
         </div>
       </div>
 
+      {/* --- MODAL BNPL (CHECKOUT) --- */}
       {showCheckout && (
         <CheckoutModal 
           tienda={store} 
-          initialAmount={cartTotal} // <--- PASAMOS EL TOTAL DEL CARRITO
+          initialAmount={cartTotal} 
           onClose={() => setShowCheckout(false)} 
         />
       )}
+
+      {/* --- MODAL SNBL (PLAN DE AHORRO) --- */}
+      <AnimatePresence>
+        {snblTarget && (
+           <SnblModal 
+             product={snblTarget} 
+             storeId={store.id} 
+             onClose={() => setSnblTarget(null)} 
+           />
+        )}
+      </AnimatePresence>
+
     </div>
   );
 }
+
+// --- SUBCOMPONENTES ---
 
 function Badge({ icon, text }) {
   return (
@@ -251,4 +323,125 @@ function Badge({ icon, text }) {
       {icon} {text}
     </div>
   );
+}
+
+function SnblModal({ product, storeId, onClose }) {
+    const navigate = useNavigate();
+    const [loading, setLoading] = useState(false);
+    
+    // Configuración Inicial
+    const [config, setConfig] = useState({
+        frecuencia: 'semanal', 
+        duracion: 4 
+    });
+
+    const montoTotal = product.price;
+    const cuota = montoTotal / config.duracion;
+
+    // Calcular fecha
+    const daysMap = { semanal: 7, quincenal: 15, mensual: 30 };
+    const daysTotal = config.duracion * daysMap[config.frecuencia];
+    const targetDate = new Date();
+    targetDate.setDate(targetDate.getDate() + daysTotal);
+
+    const handleCreateGoal = async () => {
+        setLoading(true);
+        try {
+            await api.post("/client/snbl/goals", {
+                tienda_id: storeId,
+                producto_nombre: product.name,
+                monto_meta: montoTotal,
+                frecuencia: config.frecuencia,
+                fecha_objetivo: targetDate.toISOString().split('T')[0]
+            });
+            alert("¡Plan creado! Ahora puedes ir abonando poco a poco.");
+            navigate("/ahorros");
+        } catch (e) {
+            console.error(e);
+            alert("Error al crear la meta.");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={onClose}/>
+            <motion.div initial={{scale:0.9}} animate={{scale:1}} exit={{scale:0.9}} className="relative bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden z-10">
+                
+                {/* Header */}
+                <div className="bg-indigo-600 p-6 text-white flex justify-between items-start">
+                    <div>
+                        <h3 className="text-xl font-bold flex items-center gap-2"><PiggyBank size={24} className="text-indigo-200"/> Plan de Ahorro</h3>
+                        <p className="text-indigo-100 text-sm mt-1">Sin crédito, sin intereses.</p>
+                    </div>
+                    <button onClick={onClose}><X size={24}/></button>
+                </div>
+
+                <div className="p-6 space-y-6">
+                    {/* Resumen Producto */}
+                    <div className="flex items-center gap-4 p-3 bg-slate-50 rounded-xl border border-slate-100">
+                        <img src={product.image} className="w-16 h-16 rounded-lg object-cover bg-white"/>
+                        <div>
+                            <p className="font-bold text-slate-800 text-sm line-clamp-1">{product.name}</p>
+                            <p className="text-emerald-600 font-bold">RD$ {montoTotal.toLocaleString()}</p>
+                        </div>
+                    </div>
+
+                    {/* Configuración */}
+                    <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Frecuencia de Aporte</label>
+                        <div className="grid grid-cols-3 gap-2">
+                            {['semanal', 'quincenal', 'mensual'].map(f => (
+                                <button 
+                                    key={f}
+                                    onClick={() => setConfig({...config, frecuencia: f})}
+                                    className={`py-2 rounded-lg text-xs font-bold capitalize transition ${
+                                        config.frecuencia === f 
+                                        ? 'bg-indigo-600 text-white shadow-md' 
+                                        : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                                    }`}
+                                >
+                                    {f}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div>
+                        <div className="flex justify-between mb-2">
+                            <label className="text-xs font-bold text-slate-500 uppercase">Duración</label>
+                            <span className="text-xs font-bold text-indigo-600">{config.duracion} {config.frecuencia}s</span>
+                        </div>
+                        <input 
+                            type="range" min="2" max="24" step="1"
+                            value={config.duracion}
+                            onChange={(e) => setConfig({...config, duracion: Number(e.target.value)})}
+                            className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                        />
+                    </div>
+
+                    {/* Resultado */}
+                    <div className="bg-indigo-50 border border-indigo-100 p-4 rounded-xl">
+                        <div className="flex justify-between items-center mb-1">
+                            <span className="text-sm text-indigo-800 font-medium">Tu aporte {config.frecuencia}:</span>
+                            <span className="text-xl font-black text-indigo-900">RD$ {cuota.toLocaleString(undefined, {maximumFractionDigits: 0})}</span>
+                        </div>
+                        <div className="flex justify-between items-center text-xs text-indigo-500 mt-2 border-t border-indigo-100 pt-2">
+                            <span className="flex items-center gap-1"><Calendar size={12}/> Meta:</span>
+                            <span className="font-bold">{targetDate.toLocaleDateString()}</span>
+                        </div>
+                    </div>
+
+                    <button 
+                        onClick={handleCreateGoal}
+                        disabled={loading}
+                        className="w-full bg-slate-900 text-white py-3.5 rounded-xl font-bold hover:bg-slate-800 transition shadow-lg flex items-center justify-center gap-2"
+                    >
+                        {loading ? "Creando..." : "Confirmar Plan"} <Check size={18}/>
+                    </button>
+                </div>
+            </motion.div>
+        </div>
+    )
 }

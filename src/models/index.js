@@ -29,6 +29,10 @@ import PagoBNPLModel from "./pago_bnpl.model.js";
 import CuotaModel from "./Cuota.model.js";
 import TicketModel from "./ticket.model.js";
 import AuditLogModel from "./auditLog.js"; // Importado correctamente
+import MetaAhorroModel from "./metaAhorro.js";
+import AporteMetaModel from "./AporteMeta.js";
+import ReclamacionModel from "./reclamacion.model.js";
+import ConfiguracionRiesgoModel from "./ConfiguracionRiesgo.js";
 
 const db = {};
 
@@ -52,13 +56,26 @@ db.Orden = OrdenModel(sequelize, DataTypes);
 db.PagoBNPL = PagoBNPLModel(sequelize, DataTypes);
 db.Cuota = CuotaModel(sequelize, DataTypes);
 db.TicketSoporte = TicketModel(sequelize, DataTypes);
-
-// 🔥 CORRECCIÓN 1: Inicializar AuditLog
 db.AuditLog = AuditLogModel(sequelize, DataTypes); 
+db.MetaAhorro = MetaAhorroModel(sequelize, Sequelize);
+db.AporteMeta = AporteMetaModel(sequelize, Sequelize);
+db.Reclamacion = ReclamacionModel(sequelize, Sequelize);
+db.ConfiguracionRiesgo = ConfiguracionRiesgoModel(sequelize, Sequelize);
+
 
 // =========================
 // 2. Asociaciones
 // =========================
+
+db.Cliente.hasMany(db.Reclamacion, { foreignKey: "cliente_id", as: "reclamaciones" });
+// Una Reclamación pertenece a un Cliente
+db.Reclamacion.belongsTo(db.Cliente, { foreignKey: "cliente_id", as: "cliente" });
+
+// Opcional: Si quieres relacionarlo con Órdenes
+if (db.Orden) {
+    db.Orden.hasMany(db.Reclamacion, { foreignKey: "orden_id", as: "reclamaciones" });
+    db.Reclamacion.belongsTo(db.Orden, { foreignKey: "orden_id", as: "orden" });
+}
 
 // --- Clientes y Documentos ---
 db.Cliente.hasMany(db.DocumentoCliente, { foreignKey: "cliente_id", as: "documentos" });
@@ -116,8 +133,19 @@ db.TicketSoporte.belongsTo(db.Cliente, { foreignKey: "cliente_id", as: "cliente"
 db.Orden.hasMany(db.TicketSoporte, { foreignKey: "orden_id", as: "tickets" });
 db.TicketSoporte.belongsTo(db.Orden, { foreignKey: "orden_id", as: "orden" });
 
-// --- Auditoría General del Sistema ---
-// 🔥 CORRECCIÓN 2: Usar 'db.Usuario' (que es tu admin) en lugar de 'db.AdminUser'
+// ... asociaciones ...
+// Cliente -> Metas
+db.Cliente.hasMany(db.MetaAhorro, { foreignKey: "cliente_id", as: "metas_ahorro" });
+db.MetaAhorro.belongsTo(db.Cliente, { foreignKey: "cliente_id", as: "cliente" });
+
+// Tienda -> Metas
+db.Tienda.hasMany(db.MetaAhorro, { foreignKey: "tienda_id", as: "metas" });
+db.MetaAhorro.belongsTo(db.Tienda, { foreignKey: "tienda_id", as: "tienda" });
+
+// Meta -> Aportes
+db.MetaAhorro.hasMany(db.AporteMeta, { foreignKey: "meta_id", as: "aportes" });
+db.AporteMeta.belongsTo(db.MetaAhorro, { foreignKey: "meta_id", as: "meta" });
+// --- Auditoría Centralizada ---
 db.AuditLog.belongsTo(db.Usuario, { 
   foreignKey: "admin_id", 
   as: "admin" 

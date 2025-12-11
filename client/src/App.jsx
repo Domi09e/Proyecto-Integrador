@@ -17,6 +17,19 @@ import ClientsPage from "./admin/clients/clients.jsx";
 import PartnerRequestPage from "./pages/partnerRequest.jsx";
 import StoreDetailPage from "./pages/StoreDetail.jsx";
 import SplitPayment from "./pages/SplitPayments";
+import TiendaDetallePage from "./pages/TiendaDetallePage";
+import SavingsPage from "./pages/SavingPage";
+
+
+// ... dentro de <Routes> ...
+
+  {/* Ruta para ver el detalle del producto y elegir SNBL */}
+  <Route path="/tiendas/:id" element={<TiendaDetallePage />} />
+
+  {/* Ruta para ver el progreso de mis ahorros */}
+  <Route path="/ahorros" element={<SavingsPage />} />
+
+// ...
 
 function App() {
   return (
@@ -43,6 +56,7 @@ function App() {
             <Route path="/soporte" element={<Soporte />} />
             <Route path="/cartera" element={<Cartera />} />
             <Route path="/pagos" element={<Pagos />} />
+            <Route path="/ahorros" element={<SavingsPage />} />
           </Route>
 
           {/* Rutas independientes: login y register */}

@@ -22,6 +22,14 @@ import adminPaymentsRoutes from "./routes/admin.payments.routes.js";
 import adminDashboardRoutes from "./routes/admin.dashboard.routes.js"; 
 import adminSupportRoutes from "./routes/admin.support.routes.js";
 import adminAuditRoutes from "./routes/admin.audit.routes.js";
+import clientSnblRoutes from "./routes/client.snbl.routes.js";
+import { iniciarRecordatorios } from "./cron/savingsReminder.js"; 
+import adminSnblRoutes from "./routes/admin.snbl.routes.js"; // 👈 Importar
+import { fileURLToPath } from "url";
+import clientClaimsRoutes from "./routes/client.claims.routes.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 
@@ -40,6 +48,7 @@ app.use(morgan("dev"));
 // Rutas API
 app.use("/api", AURoutes);
 app.use("/api/auth", authRoutes);
+app.use("/api/admin", adminAuthRoutes);
 app.use("/api/admin/auth", adminAuthRoutes);
 app.use("/api/admin", adminStoresRoutes);
 app.use("/api/admin", adminNotificationsRoutes);
@@ -49,6 +58,8 @@ app.use("/api/admin", adminPaymentsRoutes);
 app.use("/api/admin", adminDashboardRoutes);
 app.use("/api/admin", adminSupportRoutes);
 app.use("/api/admin", adminAuditRoutes);
+app.use("/api/client", clientSnblRoutes);
+app.use("/api/admin", adminSnblRoutes);
 
 // 🔥 ESTAS SON LAS RUTAS QUE EL FRONT NECESITA
 app.use("/api/tiendas", tiendaRoutes);
@@ -65,8 +76,14 @@ import clientRoutes from "./routes/client.routes.js";
 app.use("/api/client", clientRoutes);
 
 
+app.use("/uploads", express.static(path.join(__dirname, "public/uploads")));
+
+// 2. Registrar Rutas
+app.use("/api/client", clientClaimsRoutes);
+
+
 // Static uploads
-app.use("/uploads", express.static(path.resolve("uploads")));
+app.use("/uploads", express.static(path.resolve("public/uploads")));
 
 // Producción
 if (process.env.NODE_ENV === "production") {
@@ -77,5 +94,7 @@ if (process.env.NODE_ENV === "production") {
     res.sendFile(path.resolve("client", "dist", "index.html"));
   });
 }
+
+iniciarRecordatorios();
 
 export default app;

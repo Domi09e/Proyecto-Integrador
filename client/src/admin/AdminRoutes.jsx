@@ -17,6 +17,11 @@ import DocumentsVerification from "./clients/DocumentsVerification";
 import GroupsPage from "./groups/GroupsPage";
 import SupportPage from "./Pages/SupportPage";
 import AuditPage from "./settings/auditPage";
+import AdminGoalsPage from "./Pages/AdminGoalsPage";
+import RiskConfigPage from "./Pages/RiskConfigPage";
+
+
+
 
 
 function AdminRoute({ children }) {
@@ -48,6 +53,8 @@ export default function AdminRoutes() {
           <Route path="clientes" element={<ClientsPage />} />
           <Route path="verificacion" element={<DocumentsVerification />} />
           <Route path="soporte" element={<SupportPage />} />
+          <Route path="metas" element={<AdminGoalsPage />} />
+          <Route path="riesgos" element={<RiskConfigPage />} />
 
           {/* Configuración del Sistema */}
           <Route path="config" element={<ConfigPage />} />
