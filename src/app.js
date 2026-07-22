@@ -27,6 +27,7 @@ import { iniciarRecordatorios } from "./cron/savingsReminder.js";
 import adminSnblRoutes from "./routes/admin.snbl.routes.js";
 import { fileURLToPath } from "url";
 import clientClaimsRoutes from "./routes/client.claims.routes.js";
+import  adminCreditIncreaseRoutes  from "./routes/admin.credit_increase.routes.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -60,6 +61,7 @@ app.use("/api/admin", adminSupportRoutes);
 app.use("/api/admin", adminAuditRoutes);
 app.use("/api/client", clientSnblRoutes);
 app.use("/api/admin", adminSnblRoutes);
+app.use("/api/admin", adminCreditIncreaseRoutes);
 
 // 🔥 ESTAS SON LAS RUTAS QUE EL FRONT NECESITA
 app.use("/api/tiendas", tiendaRoutes);

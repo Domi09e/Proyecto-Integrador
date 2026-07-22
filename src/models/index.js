@@ -58,62 +58,123 @@ db.Orden = OrdenModel(sequelize, DataTypes);
 db.PagoBNPL = PagoBNPLModel(sequelize, DataTypes);
 db.Cuota = CuotaModel(sequelize, DataTypes);
 db.TicketSoporte = TicketModel(sequelize, DataTypes);
-db.AuditLog = AuditLogModel(sequelize, DataTypes); 
+db.AuditLog = AuditLogModel(sequelize, DataTypes);
 db.MetaAhorro = MetaAhorroModel(sequelize, Sequelize);
 db.AporteMeta = AporteMetaModel(sequelize, Sequelize);
 db.Reclamacion = ReclamacionModel(sequelize, Sequelize);
 db.ConfiguracionRiesgo = ConfiguracionRiesgoModel(sequelize, Sequelize);
 db.EvaluacionCrediticia = EvaluacionCrediticiaModel(sequelize, DataTypes);
-db.SolicitudAumentoCredito = SolicitudAumentoCreditoModel(sequelize, DataTypes);  
+db.SolicitudAumentoCredito = SolicitudAumentoCreditoModel(sequelize, DataTypes);
 
 // =========================
 // 2. Asociaciones
 // =========================
 
-db.Cliente.hasMany(db.Reclamacion, { foreignKey: "cliente_id", as: "reclamaciones" });
+db.Cliente.hasMany(db.Reclamacion, {
+  foreignKey: "cliente_id",
+  as: "reclamaciones",
+});
 // Una Reclamación pertenece a un Cliente
-db.Reclamacion.belongsTo(db.Cliente, { foreignKey: "cliente_id", as: "cliente" });
+db.Reclamacion.belongsTo(db.Cliente, {
+  foreignKey: "cliente_id",
+  as: "cliente",
+});
 
 // Opcional: Si quieres relacionarlo con Órdenes
 if (db.Orden) {
-    db.Orden.hasMany(db.Reclamacion, { foreignKey: "orden_id", as: "reclamaciones" });
-    db.Reclamacion.belongsTo(db.Orden, { foreignKey: "orden_id", as: "orden" });
+  db.Orden.hasMany(db.Reclamacion, {
+    foreignKey: "orden_id",
+    as: "reclamaciones",
+  });
+  db.Reclamacion.belongsTo(db.Orden, { foreignKey: "orden_id", as: "orden" });
 }
 
 // --- Clientes y Documentos ---
-db.Cliente.hasMany(db.DocumentoCliente, { foreignKey: "cliente_id", as: "documentos" });
-db.DocumentoCliente.belongsTo(db.Cliente, { foreignKey: "cliente_id", as: "cliente" });
+db.Cliente.hasMany(db.DocumentoCliente, {
+  foreignKey: "cliente_id",
+  as: "documentos",
+});
+db.DocumentoCliente.belongsTo(db.Cliente, {
+  foreignKey: "cliente_id",
+  as: "cliente",
+});
 
-db.TipoDocumento.hasMany(db.DocumentoCliente, { foreignKey: "tipo_documento_id", as: "documentos" });
-db.DocumentoCliente.belongsTo(db.TipoDocumento, { foreignKey: "tipo_documento_id", as: "tipo" });
+db.TipoDocumento.hasMany(db.DocumentoCliente, {
+  foreignKey: "tipo_documento_id",
+  as: "documentos",
+});
+db.DocumentoCliente.belongsTo(db.TipoDocumento, {
+  foreignKey: "tipo_documento_id",
+  as: "tipo",
+});
 
 // --- Métodos de Pago ---
-db.MetodoPago.belongsTo(db.Cliente, { foreignKey: "cliente_id", as: "cliente" });
-db.Cliente.hasMany(db.MetodoPago, { foreignKey: "cliente_id", as: "metodos_pago" });
+db.MetodoPago.belongsTo(db.Cliente, {
+  foreignKey: "cliente_id",
+  as: "cliente",
+});
+db.Cliente.hasMany(db.MetodoPago, {
+  foreignKey: "cliente_id",
+  as: "metodos_pago",
+});
 
 // --- Tiendas y Categorías ---
-db.Tienda.belongsToMany(db.Categoria, { through: db.TiendasCategorias, foreignKey: "tienda_id", otherKey: "categoria_id", as: "categorias" });
-db.Categoria.belongsToMany(db.Tienda, { through: db.TiendasCategorias, foreignKey: "categoria_id", otherKey: "tienda_id", as: "tiendas" });
+db.Tienda.belongsToMany(db.Categoria, {
+  through: db.TiendasCategorias,
+  foreignKey: "tienda_id",
+  otherKey: "categoria_id",
+  as: "categorias",
+});
+db.Categoria.belongsToMany(db.Tienda, {
+  through: db.TiendasCategorias,
+  foreignKey: "categoria_id",
+  otherKey: "tienda_id",
+  as: "tiendas",
+});
 
 // --- Tienda y Creador (Usuario Admin) ---
 db.Tienda.belongsTo(db.Usuario, { foreignKey: "creada_por", as: "creador" });
-db.Usuario.hasMany(db.Tienda, { foreignKey: "creada_por", as: "tiendas_creadas" });
+db.Usuario.hasMany(db.Tienda, {
+  foreignKey: "creada_por",
+  as: "tiendas_creadas",
+});
 
 // --- Auditoría de Tiendas (Legacy) ---
-db.AuditoriaTiendas.belongsTo(db.Tienda, { foreignKey: "tienda_id", as: "tienda" });
-db.AuditoriaTiendas.belongsTo(db.Usuario, { foreignKey: "usuario_id", as: "usuario" });
-db.Tienda.hasMany(db.AuditoriaTiendas, { foreignKey: "tienda_id", as: "auditorias" });
-db.Usuario.hasMany(db.AuditoriaTiendas, { foreignKey: "usuario_id", as: "auditorias_generadas" });
+db.AuditoriaTiendas.belongsTo(db.Tienda, {
+  foreignKey: "tienda_id",
+  as: "tienda",
+});
+db.AuditoriaTiendas.belongsTo(db.Usuario, {
+  foreignKey: "usuario_id",
+  as: "usuario",
+});
+db.Tienda.hasMany(db.AuditoriaTiendas, {
+  foreignKey: "tienda_id",
+  as: "auditorias",
+});
+db.Usuario.hasMany(db.AuditoriaTiendas, {
+  foreignKey: "usuario_id",
+  as: "auditorias_generadas",
+});
 
 // --- Grupos de Pago ---
-db.GrupoPago.hasMany(db.MiembroGrupo, { foreignKey: "grupo_id", as: "miembros" });
-db.MiembroGrupo.belongsTo(db.GrupoPago, { foreignKey: "grupo_id", as: "grupo" });
+db.GrupoPago.hasMany(db.MiembroGrupo, {
+  foreignKey: "grupo_id",
+  as: "miembros",
+});
+db.MiembroGrupo.belongsTo(db.GrupoPago, {
+  foreignKey: "grupo_id",
+  as: "grupo",
+});
 
 db.GrupoPago.hasMany(db.Orden, { foreignKey: "grupo_pago_id", as: "ordenes" });
 db.Orden.belongsTo(db.GrupoPago, { foreignKey: "grupo_pago_id", as: "grupo" });
 
 db.GrupoPago.belongsTo(db.Cliente, { foreignKey: "creador_id", as: "creador" });
-db.Cliente.hasMany(db.GrupoPago, { foreignKey: "creador_id", as: "grupos_creados" });
+db.Cliente.hasMany(db.GrupoPago, {
+  foreignKey: "creador_id",
+  as: "grupos_creados",
+});
 
 // --- Órdenes ---
 db.Orden.belongsTo(db.Cliente, { foreignKey: "cliente_id", as: "cliente" });
@@ -127,75 +188,86 @@ db.Orden.hasOne(db.PagoBNPL, { foreignKey: "orden_id", as: "pago_bnpl" });
 db.PagoBNPL.belongsTo(db.Orden, { foreignKey: "orden_id", as: "orden" });
 
 db.PagoBNPL.hasMany(db.Cuota, { foreignKey: "pago_bnpl_id", as: "cuotas" });
-db.Cuota.belongsTo(db.PagoBNPL, { foreignKey: "pago_bnpl_id", as: "pago_bnpl" });
-
+db.Cuota.belongsTo(db.PagoBNPL, {
+  foreignKey: "pago_bnpl_id",
+  as: "pago_bnpl",
+});
 
 // --- Evaluación crediticia ---
 db.Cliente.hasMany(db.EvaluacionCrediticia, {
   foreignKey: "cliente_id",
-  as: "evaluaciones_crediticias"
+  as: "evaluaciones_crediticias",
 });
 
 db.EvaluacionCrediticia.belongsTo(db.Cliente, {
   foreignKey: "cliente_id",
-  as: "cliente"
+  as: "cliente",
 });
 
 db.PagoBNPL.hasOne(db.EvaluacionCrediticia, {
   foreignKey: "pago_bnpl_id",
-  as: "evaluacion_crediticia"
+  as: "evaluacion_crediticia",
 });
 
 db.EvaluacionCrediticia.belongsTo(db.PagoBNPL, {
   foreignKey: "pago_bnpl_id",
-  as: "pago_bnpl"
+  as: "pago_bnpl",
 });
 
-
 // --- Solicitudes de aumento de crédito ---
-db.Cliente.hasMany(
-  db.SolicitudAumentoCredito,
-  {
-    foreignKey: "cliente_id",
-    as: "solicitudes_aumento_credito"
-  }
-);
+db.Cliente.hasMany(db.SolicitudAumentoCredito, {
+  foreignKey: "cliente_id",
+  as: "solicitudes_aumento_credito",
+});
 
-db.SolicitudAumentoCredito.belongsTo(
-  db.Cliente,
-  {
-    foreignKey: "cliente_id",
-    as: "cliente"
-  }
-);
+db.SolicitudAumentoCredito.belongsTo(db.Cliente, {
+  foreignKey: "cliente_id",
+  as: "cliente",
+});
 
-db.EvaluacionCrediticia.hasMany(
-  db.SolicitudAumentoCredito,
-  {
-    foreignKey: "evaluacion_crediticia_id",
-    as: "solicitudes_aumento"
-  }
-);
+db.EvaluacionCrediticia.hasMany(db.SolicitudAumentoCredito, {
+  foreignKey: "evaluacion_crediticia_id",
+  as: "solicitudes_aumento",
+});
 
-db.SolicitudAumentoCredito.belongsTo(
-  db.EvaluacionCrediticia,
-  {
-    foreignKey: "evaluacion_crediticia_id",
-    as: "evaluacion_crediticia"
-  }
-);
+db.SolicitudAumentoCredito.belongsTo(db.EvaluacionCrediticia, {
+  foreignKey: "evaluacion_crediticia_id",
+  as: "evaluacion_crediticia",
+});
+
+db.Usuario.hasMany(db.SolicitudAumentoCredito, {
+  foreignKey: "administrador_id",
+  as: "solicitudes_credito_revisadas",
+});
+
+db.SolicitudAumentoCredito.belongsTo(db.Usuario, {
+  foreignKey: "administrador_id",
+  as: "administrador",
+});
 
 // --- Soporte (Tickets) ---
-db.Cliente.hasMany(db.TicketSoporte, { foreignKey: "cliente_id", as: "tickets" });
-db.TicketSoporte.belongsTo(db.Cliente, { foreignKey: "cliente_id", as: "cliente" });
+db.Cliente.hasMany(db.TicketSoporte, {
+  foreignKey: "cliente_id",
+  as: "tickets",
+});
+db.TicketSoporte.belongsTo(db.Cliente, {
+  foreignKey: "cliente_id",
+  as: "cliente",
+});
 
 db.Orden.hasMany(db.TicketSoporte, { foreignKey: "orden_id", as: "tickets" });
 db.TicketSoporte.belongsTo(db.Orden, { foreignKey: "orden_id", as: "orden" });
 
 // ... asociaciones ...
 // Cliente -> Metas
-db.Cliente.hasMany(db.MetaAhorro, { foreignKey: "cliente_id", as: "metas_ahorro" });
-db.MetaAhorro.belongsTo(db.Cliente, { foreignKey: "cliente_id", as: "cliente" });
+db.Cliente.hasMany(db.MetaAhorro, {
+  foreignKey: "cliente_id",
+  as: "metas_ahorro",
+});
+db.MetaAhorro.belongsTo(db.Cliente, {
+  foreignKey: "cliente_id",
+  as: "cliente",
+});
 
 // Tienda -> Metas
 db.Tienda.hasMany(db.MetaAhorro, { foreignKey: "tienda_id", as: "metas" });
@@ -205,14 +277,14 @@ db.MetaAhorro.belongsTo(db.Tienda, { foreignKey: "tienda_id", as: "tienda" });
 db.MetaAhorro.hasMany(db.AporteMeta, { foreignKey: "meta_id", as: "aportes" });
 db.AporteMeta.belongsTo(db.MetaAhorro, { foreignKey: "meta_id", as: "meta" });
 // --- Auditoría Centralizada ---
-db.AuditLog.belongsTo(db.Usuario, { 
-  foreignKey: "admin_id", 
-  as: "admin" 
+db.AuditLog.belongsTo(db.Usuario, {
+  foreignKey: "admin_id",
+  as: "admin",
 });
 
-db.Usuario.hasMany(db.AuditLog, { 
-  foreignKey: "admin_id", 
-  as: "logs" 
+db.Usuario.hasMany(db.AuditLog, {
+  foreignKey: "admin_id",
+  as: "logs",
 });
 
 // =========================

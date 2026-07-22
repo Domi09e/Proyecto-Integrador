@@ -162,6 +162,11 @@ export default function AdminLayout() {
                 icon={<CreditCard size={20} />}
                 label="Pagos"
               />
+              <SidebarLink
+                to="/admin/Solicitudes"
+                icon={<CreditCard size={20} />}
+                label="Solicitudes"
+              />
 
               {/* ENLACE DE SOPORTE AÑADIDO CORRECTAMENTE */}
               <SidebarLink

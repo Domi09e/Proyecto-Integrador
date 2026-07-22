@@ -5,65 +5,65 @@ export default (sequelize, DataTypes) => {
       id: {
         type: DataTypes.INTEGER,
         autoIncrement: true,
-        primaryKey: true
+        primaryKey: true,
       },
 
       cliente_id: {
         type: DataTypes.INTEGER,
-        allowNull: false
+        allowNull: false,
       },
 
       evaluacion_crediticia_id: {
         type: DataTypes.INTEGER,
-        allowNull: false
+        allowNull: false,
       },
 
       monto_solicitado: {
         type: DataTypes.DECIMAL(10, 2),
-        allowNull: false
+        allowNull: false,
+      },
+
+      monto_aprobado: {
+        type: DataTypes.DECIMAL(10, 2),
+        allowNull: true,
       },
 
       motivo_cliente: {
         type: DataTypes.STRING(500),
-        allowNull: true
+        allowNull: true,
       },
 
       estado: {
-        type: DataTypes.ENUM(
-          "pendiente",
-          "aprobada",
-          "rechazada",
-          "cancelada"
-        ),
+        type: DataTypes.ENUM("pendiente", "aprobada", "rechazada", "cancelada"),
         allowNull: false,
-        defaultValue: "pendiente"
+        defaultValue: "pendiente",
       },
 
       comentario_administrador: {
         type: DataTypes.STRING(500),
-        allowNull: true
+        allowNull: true,
       },
 
       administrador_id: {
         type: DataTypes.INTEGER,
-        allowNull: true
+        allowNull: true,
       },
 
       fecha_solicitud: {
         type: DataTypes.DATE,
         allowNull: false,
-        defaultValue: DataTypes.NOW
+        defaultValue: DataTypes.NOW,
       },
 
       fecha_revision: {
         type: DataTypes.DATE,
-        allowNull: true
-      }
+        allowNull: true,
+      },
     },
     {
       tableName: "solicitudes_aumento_credito",
-      timestamps: true
-    }
+      timestamps: true,
+    },
   );
 
   return SolicitudAumentoCredito;
