@@ -1,12 +1,12 @@
 // src/controllers/client.controller.js
 import db from "../models/index.js";
 
-const { Cliente, MetodoPago } = db;
+const { Cliente, MetodoPago, EvaluacionCrediticia, SolicitudAumentoCredito } = db;
 
 function getClienteIdFromReq(req) {
   if (req.cliente?.id) return req.cliente.id;
-  if(req.user?.id) return req.user.id; // fallback por compatibilidad
-  if(req.userId) return req.userId; // otro fallback
+  if (req.user?.id) return req.user.id; // fallback por compatibilidad
+  if (req.userId) return req.userId; // otro fallback
   return null;
 }
 /* ============================
@@ -51,7 +51,7 @@ export const updateClientProfile = async (req, res) => {
     if (!clienteId) {
       return res
         .status(400)
-        .json({ message: "Cliente no identificado en el token." }); 
+        .json({ message: "Cliente no identificado en el token." });
     }
     const { nombre, apellido, telefono, address } = req.body;
     const cli = await Cliente.findByPk(clienteId);
@@ -71,7 +71,6 @@ export const updateClientProfile = async (req, res) => {
   }
 };
 
-
 /* ============================
    MÉTODOS DE PAGO
 ============================ */
@@ -86,7 +85,10 @@ export const getClientPaymentMethods = async (req, res) => {
 
     const methods = await MetodoPago.findAll({
       where: { cliente_id: clienteId },
-      order: [["es_predeterminado", "DESC"], ["id", "DESC"]],
+      order: [
+        ["es_predeterminado", "DESC"],
+        ["id", "DESC"],
+      ],
       attributes: [
         "id",
         "tipo",
@@ -131,7 +133,7 @@ export const createClientPaymentMethod = async (req, res) => {
     if (es_predeterminado) {
       await MetodoPago.update(
         { es_predeterminado: 0 },
-        { where: { cliente_id: clienteId } }
+        { where: { cliente_id: clienteId } },
       );
     }
 
@@ -190,7 +192,8 @@ export const getClientPaymentPreferences = async (req, res) => {
       attributes: ["id", "preferencia_bnpl"],
     });
 
-    if (!cli) return res.status(404).json({ message: "Cliente no encontrado." });
+    if (!cli)
+      return res.status(404).json({ message: "Cliente no encontrado." });
 
     // devolvemos el valor EXACTO del enum
     res.json({
@@ -201,7 +204,6 @@ export const getClientPaymentPreferences = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
-
 
 export const updateClientPaymentPreferences = async (req, res) => {
   try {
@@ -228,7 +230,8 @@ export const updateClientPaymentPreferences = async (req, res) => {
     }
 
     const cli = await Cliente.findByPk(clienteId);
-    if (!cli) return res.status(404).json({ message: "Cliente no encontrado." });
+    if (!cli)
+      return res.status(404).json({ message: "Cliente no encontrado." });
 
     cli.preferencia_bnpl = preferencia_bnpl;
     await cli.save();
@@ -240,7 +243,6 @@ export const updateClientPaymentPreferences = async (req, res) => {
   }
 };
 
-
 /* ============================
    RESUMEN FINANCIERO (CARTERA)
 ============================ */
@@ -248,11 +250,13 @@ export const getClientWalletData = async (req, res) => {
   try {
     // Obtenemos el ID del cliente del token
     const clienteId = req.cliente?.id || req.user?.id;
-    if (!clienteId) return res.status(400).json({ message: "Cliente no identificado" });
+    if (!clienteId)
+      return res.status(400).json({ message: "Cliente no identificado" });
 
     // 1. Obtener Cliente (para ver su crédito disponible)
     const cliente = await Cliente.findByPk(clienteId);
-    if (!cliente) return res.status(404).json({ message: "Cliente no encontrado" });
+    if (!cliente)
+      return res.status(404).json({ message: "Cliente no encontrado" });
 
     // 2. Buscar todas las órdenes activas del cliente con sus pagos y cuotas
     // Usamos una consulta un poco más manual para garantizar que traiga todo
@@ -269,11 +273,11 @@ export const getClientWalletData = async (req, res) => {
             {
               model: db.Cuota,
               as: "cuotas", // Asegúrate de tener PagoBNPL -> hasMany -> Cuotas
-            }
-          ]
-        }
+            },
+          ],
+        },
       ],
-      order: [["fecha", "DESC"]]
+      order: [["fecha", "DESC"]],
     });
 
     // 3. Procesar datos para el Frontend
@@ -282,16 +286,21 @@ export const getClientWalletData = async (req, res) => {
     let comprasActivas = [];
 
     // Filtramos solo las órdenes que tienen un plan BNPL activo
-    const ordenesActivas = ordenes.filter(o => o.pago_bnpl);
+    const ordenesActivas = ordenes.filter((o) => o.pago_bnpl);
 
     for (const ord of ordenesActivas) {
       const bnpl = ord.pago_bnpl;
       const cuotas = bnpl.cuotas || [];
-      
+
       // Calcular deuda pendiente de esta orden
-      const pendientes = cuotas.filter(c => c.estado === 'pendiente' || c.estado === 'atrasado');
-      const montoPendienteOrden = pendientes.reduce((acc, c) => acc + Number(c.monto), 0);
-      
+      const pendientes = cuotas.filter(
+        (c) => c.estado === "pendiente" || c.estado === "atrasado",
+      );
+      const montoPendienteOrden = pendientes.reduce(
+        (acc, c) => acc + Number(c.monto),
+        0,
+      );
+
       deudaTotal += montoPendienteOrden;
 
       // Buscar la cuota más próxima a vencer de TODO el historial
@@ -302,13 +311,13 @@ export const getClientWalletData = async (req, res) => {
             fecha: c.fecha_vencimiento,
             monto: c.monto,
             tienda: ord.tienda?.nombre || "Tienda",
-            numero: c.numero_cuota
+            numero: c.numero_cuota,
           };
         }
       }
 
       // Estructura para la lista de compras
-      const pagadas = cuotas.filter(c => c.estado === 'pagado').length;
+      const pagadas = cuotas.filter((c) => c.estado === "pagado").length;
       const totalCuotas = cuotas.length;
       const progreso = totalCuotas > 0 ? (pagadas / totalCuotas) * 100 : 0;
 
@@ -321,7 +330,7 @@ export const getClientWalletData = async (req, res) => {
         deuda_restante: montoPendienteOrden,
         progreso: Math.round(progreso),
         cuotas_restantes: pendientes.length,
-        proximo_vencimiento: pendientes[0]?.fecha_vencimiento || null
+        proximo_vencimiento: pendientes[0]?.fecha_vencimiento || null,
       });
     }
 
@@ -329,16 +338,83 @@ export const getClientWalletData = async (req, res) => {
       disponible: Number(cliente.poder_credito),
       deuda_total: deudaTotal,
       proximo_pago: proximaCuota,
-      compras_activas: comprasActivas
+      compras_activas: comprasActivas,
     });
-
   } catch (error) {
     console.error("Error getClientWalletData:", error);
     res.status(500).json({ message: error.message });
   }
 };
 
+/* =============================================
+   OBTENER EVALUACIÓN CREDITICIA DEL CLIENTE
+============================================= */
+export const getClientCreditEvaluation = async (req, res) => {
+  try {
+    const clienteId = getClienteIdFromReq(req);
 
+    if (!clienteId) {
+      return res.status(400).json({
+        message: "Cliente no identificado en el token.",
+      });
+    }
+
+    // Obtener la evaluación más reciente del cliente
+    const ultimaEvaluacion = await EvaluacionCrediticia.findOne({
+      where: {
+        cliente_id: clienteId,
+      },
+      order: [
+        ["fecha_evaluacion", "DESC"],
+        ["id", "DESC"],
+      ],
+    });
+
+    // Si el cliente todavía no tiene una evaluación
+    if (!ultimaEvaluacion) {
+      return res.json({
+        tiene_evaluacion: false,
+        es_elegible: false,
+        mensaje:
+          "Completa un financiamiento para obtener tu primera evaluación crediticia.",
+        evaluacion: null,
+      });
+    }
+
+    return res.json({
+      tiene_evaluacion: true,
+      es_elegible: Boolean(ultimaEvaluacion.es_elegible),
+
+      mensaje: ultimaEvaluacion.es_elegible
+        ? "Tu comportamiento crediticio es favorable. Puedes solicitar una revisión de tu límite."
+        : "Por el momento no cumples con los requisitos para solicitar un aumento.",
+
+      evaluacion: {
+        id: ultimaEvaluacion.id,
+
+        cuotas_totales: ultimaEvaluacion.cuotas_totales,
+
+        cuotas_pagadas_a_tiempo: ultimaEvaluacion.cuotas_pagadas_a_tiempo,
+
+        cuotas_pagadas_tarde: ultimaEvaluacion.cuotas_pagadas_tarde,
+
+        porcentaje_puntualidad: Number(ultimaEvaluacion.porcentaje_puntualidad),
+
+        es_elegible: Boolean(ultimaEvaluacion.es_elegible),
+
+        observaciones: ultimaEvaluacion.observaciones,
+
+        fecha_evaluacion: ultimaEvaluacion.fecha_evaluacion,
+      },
+    });
+  } catch (error) {
+    console.error("Error getClientCreditEvaluation:", error);
+
+    return res.status(500).json({
+      message: "Error al obtener la evaluación crediticia.",
+    });
+  }
+};
 /* ============================
    OBTENER ÓRDENES ACTIVAS (Para Dividir Cuenta)
 ============================ */
@@ -348,43 +424,42 @@ export const getClientWalletData = async (req, res) => {
 export const getActiveOrders = async (req, res) => {
   try {
     const userId = req.cliente?.id || req.user?.id;
-    if (!userId) return res.status(400).json({ message: "Usuario no identificado" });
+    if (!userId)
+      return res.status(400).json({ message: "Usuario no identificado" });
 
     const ordenes = await db.Orden.findAll({
       where: { cliente_id: userId },
       include: [
-        { 
-          model: db.Tienda, 
+        {
+          model: db.Tienda,
           as: "tienda",
-          attributes: ['nombre', 'logo_url'] // Agregamos logo si quieres
+          attributes: ["nombre", "logo_url"], // Agregamos logo si quieres
         },
-        { 
-          model: db.PagoBNPL, 
+        {
+          model: db.PagoBNPL,
           as: "pago_bnpl",
           where: { estado: "activo" },
-          required: true
-        }
+          required: true,
+        },
       ],
-      order: [['fecha', 'DESC']]
+      order: [["fecha", "DESC"]],
     });
-    
-    const data = ordenes.map(o => ({
+
+    const data = ordenes.map((o) => ({
       id: o.id,
       tienda: o.tienda?.nombre || "Tienda",
       total: o.total,
       pendiente: o.pago_bnpl?.monto_pendiente || 0,
       fecha: o.fecha,
-      grupo_pago_id: o.grupo_pago_id // <--- 🔥 AGREGAMOS ESTO IMPORTANTE
+      grupo_pago_id: o.grupo_pago_id, // <--- 🔥 AGREGAMOS ESTO IMPORTANTE
     }));
 
     res.json(data);
-
   } catch (err) {
     console.error("Error getActiveOrders:", err);
     res.status(500).json({ message: "Error al obtener las compras activas." });
   }
 };
-
 
 /* =============================================
    DASHBOARD PAGOS (DATA TIPO KLARNA)
@@ -392,35 +467,39 @@ export const getActiveOrders = async (req, res) => {
 export const getPaymentsDashboard = async (req, res) => {
   try {
     const userId = req.cliente?.id || req.user?.id;
-    
+
     // 1. Calcular Deuda Total
-    const deudaRes = await db.PagoBNPL.sum('monto_pendiente', {
-      include: [{
-        model: db.Orden,
-        as: 'orden',
-        where: { cliente_id: userId }
-      }],
-      where: { estado: ['activo', 'atrasado'] }
+    const deudaRes = await db.PagoBNPL.sum("monto_pendiente", {
+      include: [
+        {
+          model: db.Orden,
+          as: "orden",
+          where: { cliente_id: userId },
+        },
+      ],
+      where: { estado: ["activo", "atrasado"] },
     });
 
     // 2. Historial de Compras (All purchases)
     const historial = await db.Orden.findAll({
       where: { cliente_id: userId },
-      include: [{ model: db.Tienda, as: "tienda", attributes: ['nombre', 'logo_url'] }],
-      order: [['fecha', 'DESC']],
-      limit: 10
+      include: [
+        { model: db.Tienda, as: "tienda", attributes: ["nombre", "logo_url"] },
+      ],
+      order: [["fecha", "DESC"]],
+      limit: 10,
     });
 
     // 3. Insights (Gasto este mes)
     const inicioMes = new Date();
     inicioMes.setDate(1);
-    inicioMes.setHours(0,0,0,0);
-    
-    const gastoMes = await db.Orden.sum('total', {
+    inicioMes.setHours(0, 0, 0, 0);
+
+    const gastoMes = await db.Orden.sum("total", {
       where: {
         cliente_id: userId,
-        fecha: { [db.Sequelize.Op.gte]: inicioMes } // Mayor o igual al día 1
-      }
+        fecha: { [db.Sequelize.Op.gte]: inicioMes }, // Mayor o igual al día 1
+      },
     });
 
     // 4. Devoluciones (Tickets tipo 'devolucion')
@@ -428,26 +507,331 @@ export const getPaymentsDashboard = async (req, res) => {
     const devoluciones = await db.TicketSoporte.count({
       where: {
         cliente_id: userId,
-        asunto: { [db.Sequelize.Op.like]: '%Devolución%' }
-      }
+        asunto: { [db.Sequelize.Op.like]: "%Devolución%" },
+      },
     });
 
     res.json({
       totalOwed: deudaRes || 0,
       spentThisMonth: gastoMes || 0,
       refundsCount: devoluciones || 0,
-      recentPurchases: historial.map(h => ({
+      recentPurchases: historial.map((h) => ({
         id: h.id,
         tienda: h.tienda.nombre,
         logo: h.tienda.logo_url,
         total: h.total,
         estado: h.estado,
-        fecha: h.fecha
-      }))
+        fecha: h.fecha,
+      })),
     });
-
   } catch (err) {
     console.error("Error dashboard:", err);
     res.status(500).json({ message: "Error cargando dashboard" });
   }
 };
+
+/* =============================================
+   SOLICITAR AUMENTO DE CRÉDITO
+============================================= */
+export const requestCreditIncrease = async (
+  req,
+  res
+) => {
+  try {
+    const clienteId = getClienteIdFromReq(req);
+
+    if (!clienteId) {
+      return res.status(400).json({
+        message:
+          "Cliente no identificado en el token."
+      });
+    }
+
+    const {
+      monto_solicitado,
+      motivo_cliente
+    } = req.body;
+
+    const montoSolicitado = Number(
+      monto_solicitado
+    );
+
+    // Validar monto
+    if (
+      !Number.isFinite(montoSolicitado) ||
+      montoSolicitado <= 0
+    ) {
+      return res.status(400).json({
+        message:
+          "Debes indicar un monto válido mayor que cero."
+      });
+    }
+
+    // Límite provisional para evitar solicitudes absurdas
+    if (montoSolicitado > 500000) {
+      return res.status(400).json({
+        message:
+          "El monto solicitado excede el máximo permitido."
+      });
+    }
+
+    // Obtener la evaluación más reciente
+    const ultimaEvaluacion =
+      await EvaluacionCrediticia.findOne({
+        where: {
+          cliente_id: clienteId
+        },
+        order: [
+          ["fecha_evaluacion", "DESC"],
+          ["id", "DESC"]
+        ]
+      });
+
+    if (!ultimaEvaluacion) {
+      return res.status(403).json({
+        message:
+          "Todavía no tienes una evaluación crediticia."
+      });
+    }
+
+    if (!ultimaEvaluacion.es_elegible) {
+      return res.status(403).json({
+        message:
+          "Tu última evaluación no es elegible para solicitar un aumento."
+      });
+    }
+
+    // Evitar más de una solicitud pendiente
+    const solicitudPendiente =
+      await SolicitudAumentoCredito.findOne({
+        where: {
+          cliente_id: clienteId,
+          estado: "pendiente"
+        }
+      });
+
+    if (solicitudPendiente) {
+      return res.status(409).json({
+        message:
+          "Ya tienes una solicitud pendiente de revisión.",
+        solicitud: solicitudPendiente
+      });
+    }
+
+    const solicitud =
+      await SolicitudAumentoCredito.create({
+        cliente_id: clienteId,
+
+        evaluacion_crediticia_id:
+          ultimaEvaluacion.id,
+
+        monto_solicitado:
+          montoSolicitado.toFixed(2),
+
+        motivo_cliente:
+          motivo_cliente?.trim() || null,
+
+        estado: "pendiente",
+
+        fecha_solicitud: new Date()
+      });
+
+    return res.status(201).json({
+      message:
+        "Solicitud de aumento enviada correctamente.",
+
+      solicitud: {
+        id: solicitud.id,
+
+        monto_solicitado: Number(
+          solicitud.monto_solicitado
+        ),
+
+        motivo_cliente:
+          solicitud.motivo_cliente,
+
+        estado: solicitud.estado,
+
+        fecha_solicitud:
+          solicitud.fecha_solicitud
+      }
+    });
+  } catch (error) {
+    console.error(
+      "Error requestCreditIncrease:",
+      error
+    );
+
+    return res.status(500).json({
+      message:
+        "Error al crear la solicitud de aumento."
+    });
+  }
+};
+
+/* =============================================
+   OBTENER SOLICITUDES DE AUMENTO DEL CLIENTE
+============================================= */
+export const getClientCreditIncreaseRequests =
+  async (req, res) => {
+    try {
+      const clienteId =
+        getClienteIdFromReq(req);
+
+      if (!clienteId) {
+        return res.status(400).json({
+          message:
+            "Cliente no identificado en el token."
+        });
+      }
+
+      const solicitudes =
+        await SolicitudAumentoCredito.findAll({
+          where: {
+            cliente_id: clienteId
+          },
+
+          include: [
+            {
+              model: EvaluacionCrediticia,
+              as: "evaluacion_crediticia",
+
+              attributes: [
+                "id",
+                "porcentaje_puntualidad",
+                "cuotas_totales",
+                "cuotas_pagadas_a_tiempo",
+                "cuotas_pagadas_tarde",
+                "es_elegible",
+                "fecha_evaluacion"
+              ]
+            }
+          ],
+
+          order: [
+            ["fecha_solicitud", "DESC"],
+            ["id", "DESC"]
+          ]
+        });
+
+      return res.json({
+        total: solicitudes.length,
+
+        solicitudes: solicitudes.map(
+          solicitud => ({
+            id: solicitud.id,
+
+            monto_solicitado: Number(
+              solicitud.monto_solicitado
+            ),
+
+            motivo_cliente:
+              solicitud.motivo_cliente,
+
+            estado: solicitud.estado,
+
+            comentario_administrador:
+              solicitud.comentario_administrador,
+
+            fecha_solicitud:
+              solicitud.fecha_solicitud,
+
+            fecha_revision:
+              solicitud.fecha_revision,
+
+            evaluacion:
+              solicitud.evaluacion_crediticia
+          })
+        )
+      });
+    } catch (error) {
+      console.error(
+        "Error getClientCreditIncreaseRequests:",
+        error
+      );
+
+      return res.status(500).json({
+        message:
+          "Error al obtener las solicitudes."
+      });
+    }
+  };
+
+  /* =============================================
+   CANCELAR SOLICITUD DE AUMENTO
+============================================= */
+export const cancelCreditIncreaseRequest =
+  async (req, res) => {
+    try {
+      const clienteId =
+        getClienteIdFromReq(req);
+
+      const solicitudId = Number(
+        req.params.id
+      );
+
+      if (!clienteId) {
+        return res.status(400).json({
+          message:
+            "Cliente no identificado en el token."
+        });
+      }
+
+      if (
+        !Number.isInteger(solicitudId) ||
+        solicitudId <= 0
+      ) {
+        return res.status(400).json({
+          message:
+            "Identificador de solicitud inválido."
+        });
+      }
+
+      const solicitud =
+        await SolicitudAumentoCredito.findOne({
+          where: {
+            id: solicitudId,
+            cliente_id: clienteId
+          }
+        });
+
+      if (!solicitud) {
+        return res.status(404).json({
+          message:
+            "Solicitud no encontrada."
+        });
+      }
+
+      if (solicitud.estado !== "pendiente") {
+        return res.status(409).json({
+          message:
+            "Solo puedes cancelar solicitudes pendientes."
+        });
+      }
+
+      solicitud.estado = "cancelada";
+
+      await solicitud.save();
+
+      return res.json({
+        message:
+          "Solicitud cancelada correctamente.",
+
+        solicitud: {
+          id: solicitud.id,
+          estado: solicitud.estado
+        }
+      });
+    } catch (error) {
+      console.error(
+        "Error cancelCreditIncreaseRequest:",
+        error
+      );
+
+      return res.status(500).json({
+        message:
+          "Error al cancelar la solicitud."
+      });
+    }
+  };
+

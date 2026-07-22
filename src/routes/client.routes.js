@@ -11,6 +11,10 @@ import {
   getActiveOrders,
   getClientWalletData,
   getPaymentsDashboard,
+  getClientCreditEvaluation,
+  requestCreditIncrease,
+  getClientCreditIncreaseRequests,
+  cancelCreditIncreaseRequest,
 } from "../controllers/client.controller.js";
 import { requireAuth } from "../middlewares/auth.middleware.js";
 
@@ -56,7 +60,7 @@ router.get("/documentos", getDocumentosCliente);
 router.post(
   "/documentos",
   uploadDocumento.single("archivo"),
-  crearDocumentoCliente
+  crearDocumentoCliente,
 );
 router.put("/documentos/:id/estado", actualizarEstadoDocumento);
 
@@ -67,6 +71,13 @@ router.post("/notifications/read-all", markClientNotificationsRead);
 // Cartera / Resumen
 router.get("/wallet-summary", getClientWalletData);
 router.get("/active-orders", getActiveOrders);
+router.get("/credit-evaluation", getClientCreditEvaluation);
+router.post("/credit-increase-requests", requestCreditIncrease);
+router.get("/credit-increase-requests", getClientCreditIncreaseRequests);
+router.patch(
+  "/credit-increase-requests/:id/cancel",
+  cancelCreditIncreaseRequest,
+);
 
 router.post("/support", createTicket);
 router.get("/support", getMyTickets);
@@ -94,7 +105,7 @@ router.get("/active-orders", async (req, res) => {
         total: o.total,
         pendiente: o.pago_bnpl.monto_pendiente,
         fecha: o.fecha,
-      }))
+      })),
     );
   } catch (err) {
     res.status(500).json({ message: "Error obteniendo órdenes" });

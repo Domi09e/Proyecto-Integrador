@@ -33,6 +33,8 @@ import MetaAhorroModel from "./metaAhorro.js";
 import AporteMetaModel from "./AporteMeta.js";
 import ReclamacionModel from "./reclamacion.model.js";
 import ConfiguracionRiesgoModel from "./ConfiguracionRiesgo.js";
+import EvaluacionCrediticiaModel from "./evaluacion_crediticia.model.js";
+import SolicitudAumentoCreditoModel from "./solicitud_aumento_credito.model.js";
 
 const db = {};
 
@@ -61,7 +63,8 @@ db.MetaAhorro = MetaAhorroModel(sequelize, Sequelize);
 db.AporteMeta = AporteMetaModel(sequelize, Sequelize);
 db.Reclamacion = ReclamacionModel(sequelize, Sequelize);
 db.ConfiguracionRiesgo = ConfiguracionRiesgoModel(sequelize, Sequelize);
-
+db.EvaluacionCrediticia = EvaluacionCrediticiaModel(sequelize, DataTypes);
+db.SolicitudAumentoCredito = SolicitudAumentoCreditoModel(sequelize, DataTypes);  
 
 // =========================
 // 2. Asociaciones
@@ -125,6 +128,62 @@ db.PagoBNPL.belongsTo(db.Orden, { foreignKey: "orden_id", as: "orden" });
 
 db.PagoBNPL.hasMany(db.Cuota, { foreignKey: "pago_bnpl_id", as: "cuotas" });
 db.Cuota.belongsTo(db.PagoBNPL, { foreignKey: "pago_bnpl_id", as: "pago_bnpl" });
+
+
+// --- Evaluación crediticia ---
+db.Cliente.hasMany(db.EvaluacionCrediticia, {
+  foreignKey: "cliente_id",
+  as: "evaluaciones_crediticias"
+});
+
+db.EvaluacionCrediticia.belongsTo(db.Cliente, {
+  foreignKey: "cliente_id",
+  as: "cliente"
+});
+
+db.PagoBNPL.hasOne(db.EvaluacionCrediticia, {
+  foreignKey: "pago_bnpl_id",
+  as: "evaluacion_crediticia"
+});
+
+db.EvaluacionCrediticia.belongsTo(db.PagoBNPL, {
+  foreignKey: "pago_bnpl_id",
+  as: "pago_bnpl"
+});
+
+
+// --- Solicitudes de aumento de crédito ---
+db.Cliente.hasMany(
+  db.SolicitudAumentoCredito,
+  {
+    foreignKey: "cliente_id",
+    as: "solicitudes_aumento_credito"
+  }
+);
+
+db.SolicitudAumentoCredito.belongsTo(
+  db.Cliente,
+  {
+    foreignKey: "cliente_id",
+    as: "cliente"
+  }
+);
+
+db.EvaluacionCrediticia.hasMany(
+  db.SolicitudAumentoCredito,
+  {
+    foreignKey: "evaluacion_crediticia_id",
+    as: "solicitudes_aumento"
+  }
+);
+
+db.SolicitudAumentoCredito.belongsTo(
+  db.EvaluacionCrediticia,
+  {
+    foreignKey: "evaluacion_crediticia_id",
+    as: "evaluacion_crediticia"
+  }
+);
 
 // --- Soporte (Tickets) ---
 db.Cliente.hasMany(db.TicketSoporte, { foreignKey: "cliente_id", as: "tickets" });

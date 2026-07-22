@@ -24,7 +24,7 @@ import adminSupportRoutes from "./routes/admin.support.routes.js";
 import adminAuditRoutes from "./routes/admin.audit.routes.js";
 import clientSnblRoutes from "./routes/client.snbl.routes.js";
 import { iniciarRecordatorios } from "./cron/savingsReminder.js"; 
-import adminSnblRoutes from "./routes/admin.snbl.routes.js"; // 👈 Importar
+import adminSnblRoutes from "./routes/admin.snbl.routes.js";
 import { fileURLToPath } from "url";
 import clientClaimsRoutes from "./routes/client.claims.routes.js";
 
