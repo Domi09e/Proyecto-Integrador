@@ -44,12 +44,46 @@ export const AuthProvider = ({ children }) => {
 
   const signin = async (user) => {
     try {
+      setErrors([]);
+
       const res = await loginRequest(user);
+
       setUser(res.data);
       setIsAuthenticated(true);
+
+      return {
+        ok: true,
+      };
     } catch (error) {
-      console.log(error);
-      // setErrors(error.response.data.message);
+      console.error("Error iniciando sesión:", error);
+
+      const mensajeBackend = error.response?.data?.message;
+
+      const motivo = error.response?.data?.motivo;
+
+      let mensajes = [];
+
+      if (Array.isArray(mensajeBackend)) {
+        mensajes = mensajeBackend;
+      } else if (mensajeBackend) {
+        mensajes = [mensajeBackend];
+      } else {
+        mensajes = ["No se pudo iniciar sesión."];
+      }
+
+      if (motivo) {
+        mensajes.push(motivo);
+      }
+
+      setUser(null);
+      setIsAuthenticated(false);
+      setErrors(mensajes);
+
+      return {
+        ok: false,
+
+        codigo: error.response?.data?.codigo || null,
+      };
     }
   };
 

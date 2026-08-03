@@ -3,26 +3,17 @@ import db from "../models/index.js";
 import bcrypt from "bcryptjs";
 import { createAccessToken } from "../libs/jwt.js";
 
-const { Cliente } = db;  
+const { Cliente, PerfilRiesgoCliente } = db;
 
 // POST /api/auth/register-cliente
 export const register = async (req, res) => {
   try {
-    const {
-      nombre,
-      apellido,
-      email,
-      password,
-      telefono,
-      address,
-    } = req.body;
+    const { nombre, apellido, email, password, telefono, address } = req.body;
 
     // ¿Email ya usado?
     const clienteFound = await Cliente.findOne({ where: { email } });
     if (clienteFound) {
-      return res
-        .status(400)
-        .json({ message: ["El email ya está en uso"] });
+      return res.status(400).json({ message: ["El email ya está en uso"] });
     }
 
     // Hashear contraseña
@@ -35,7 +26,7 @@ export const register = async (req, res) => {
       telefono,
       address,
       password_hash,
-      poder_credito: 0, 
+      poder_credito: 0,
       activo: 1,
     });
 
@@ -73,10 +64,7 @@ export const login = async (req, res) => {
       return res.status(400).json({ message: ["El email no existe"] });
     }
 
-    const isMatch = await bcrypt.compare(
-      password,
-      clienteFound.password_hash
-    );
+    const isMatch = await bcrypt.compare(password, clienteFound.password_hash);
     if (!isMatch) {
       return res.status(400).json({ message: ["La contraseña es incorrecta"] });
     }
@@ -85,6 +73,34 @@ export const login = async (req, res) => {
       return res
         .status(403)
         .json({ message: ["Tu cuenta está inactiva, contacta soporte"] });
+    }
+
+    /* Nivel 1: Bloquear antes de general el token. */
+    const perfilRiesgo = await PerfilRiesgoCliente.findOne({
+      where: {
+        cliente_id: clienteFound.id,
+      },
+
+      attributes: [
+        "bloqueado_preventivamente",
+        "motivo_bloqueo",
+        "puntaje_fraude",
+        "nivel_riesgo",
+      ],
+    });
+
+    if (perfilRiesgo?.bloqueado_preventivamente) {
+      return res.status(423).json({
+        message: [
+          "Tu cuenta está bloqueada temporalmente por motivos de seguridad.",
+        ],
+
+        motivo:
+          perfilRiesgo.motivo_bloqueo ||
+          "Se detectó actividad que requiere verificación.",
+
+        codigo: "CUENTA_BLOQUEADA_PREVENTIVAMENTE",
+      });
     }
 
     const tokenPayload = { id: clienteFound.id, tipo: "cliente" };
@@ -116,9 +132,10 @@ export const verifyToken = async (req, res) => {
   try {
     // 👇 tomamos el id que el middleware guardó
     const clienteId =
-      req.cliente?.id ||      // si tu middleware usa req.cliente
-      req.user?.id ||         // o req.user
-      req.userId || null;     // o req.userId
+      req.cliente?.id || // si tu middleware usa req.cliente
+      req.user?.id || // o req.user
+      req.userId ||
+      null; // o req.userId
 
     if (!clienteId) {
       return res.status(401).json({ message: "Unauthorized" });
