@@ -40,6 +40,7 @@ import EvaluacionDinamicaModel from "./evaluacion_dinamica.model.js";
 import SenalEvaluacionModel from "./senal_evaluacion.model.js";
 import AlertaRiesgoModel from "./alerta_riesgo.model.js";
 import HistorialPerfilRiesgoModel from "./historial_perfil_riesgo.model.js";
+import PagoEngancheModel from "./pago_enganche.model.js";
 
 const db = {};
 
@@ -75,6 +76,7 @@ db.EvaluacionDinamica = EvaluacionDinamicaModel(sequelize, DataTypes);
 db.SenalEvaluacion = SenalEvaluacionModel(sequelize, DataTypes);
 db.AlertaRiesgo = AlertaRiesgoModel(sequelize, DataTypes);
 db.HistorialPerfilRiesgo = HistorialPerfilRiesgoModel(sequelize, DataTypes);
+db.PagoEnganche = PagoEngancheModel(sequelize, Sequelize.DataTypes);
 
 // =========================
 // 2. Asociaciones
@@ -302,176 +304,154 @@ db.Usuario.hasMany(db.AuditLog, {
 // =============================================
 
 // Cliente 1 — 1 Perfil de riesgo
-db.Cliente.hasOne(
-  db.PerfilRiesgoCliente,
-  {
-    foreignKey: "cliente_id",
-    as: "perfil_riesgo",
-  },
-);
+db.Cliente.hasOne(db.PerfilRiesgoCliente, {
+  foreignKey: "cliente_id",
+  as: "perfil_riesgo",
+});
 
-db.PerfilRiesgoCliente.belongsTo(
-  db.Cliente,
-  {
-    foreignKey: "cliente_id",
-    as: "cliente",
-  },
-);
+db.PerfilRiesgoCliente.belongsTo(db.Cliente, {
+  foreignKey: "cliente_id",
+  as: "cliente",
+});
 
 // Cliente 1 — N Evaluaciones dinámicas
-db.Cliente.hasMany(
-  db.EvaluacionDinamica,
-  {
-    foreignKey: "cliente_id",
-    as: "evaluaciones_dinamicas",
-  },
-);
+db.Cliente.hasMany(db.EvaluacionDinamica, {
+  foreignKey: "cliente_id",
+  as: "evaluaciones_dinamicas",
+});
 
-db.EvaluacionDinamica.belongsTo(
-  db.Cliente,
-  {
-    foreignKey: "cliente_id",
-    as: "cliente",
-  },
-);
+db.EvaluacionDinamica.belongsTo(db.Cliente, {
+  foreignKey: "cliente_id",
+  as: "cliente",
+});
 
 // Orden 1 — N Evaluaciones dinámicas
-db.Orden.hasMany(
-  db.EvaluacionDinamica,
-  {
-    foreignKey: "orden_id",
-    as: "evaluaciones_riesgo",
-  },
-);
+db.Orden.hasMany(db.EvaluacionDinamica, {
+  foreignKey: "orden_id",
+  as: "evaluaciones_riesgo",
+});
 
-db.EvaluacionDinamica.belongsTo(
-  db.Orden,
-  {
-    foreignKey: "orden_id",
-    as: "orden",
-  },
-);
+db.EvaluacionDinamica.belongsTo(db.Orden, {
+  foreignKey: "orden_id",
+  as: "orden",
+});
 
 // Evaluación 1 — N Señales
-db.EvaluacionDinamica.hasMany(
-  db.SenalEvaluacion,
-  {
-    foreignKey: "evaluacion_id",
-    as: "senales",
-  },
-);
+db.EvaluacionDinamica.hasMany(db.SenalEvaluacion, {
+  foreignKey: "evaluacion_id",
+  as: "senales",
+});
 
-db.SenalEvaluacion.belongsTo(
-  db.EvaluacionDinamica,
-  {
-    foreignKey: "evaluacion_id",
-    as: "evaluacion",
-  },
-);
+db.SenalEvaluacion.belongsTo(db.EvaluacionDinamica, {
+  foreignKey: "evaluacion_id",
+  as: "evaluacion",
+});
 
 // Cliente 1 — N Alertas
-db.Cliente.hasMany(
-  db.AlertaRiesgo,
-  {
-    foreignKey: "cliente_id",
-    as: "alertas_riesgo",
-  },
-);
+db.Cliente.hasMany(db.AlertaRiesgo, {
+  foreignKey: "cliente_id",
+  as: "alertas_riesgo",
+});
 
-db.AlertaRiesgo.belongsTo(
-  db.Cliente,
-  {
-    foreignKey: "cliente_id",
-    as: "cliente",
-  },
-);
+db.AlertaRiesgo.belongsTo(db.Cliente, {
+  foreignKey: "cliente_id",
+  as: "cliente",
+});
 
 // Evaluación 1 — N Alertas
-db.EvaluacionDinamica.hasMany(
-  db.AlertaRiesgo,
-  {
-    foreignKey: "evaluacion_id",
-    as: "alertas",
-  },
-);
+db.EvaluacionDinamica.hasMany(db.AlertaRiesgo, {
+  foreignKey: "evaluacion_id",
+  as: "alertas",
+});
 
-db.AlertaRiesgo.belongsTo(
-  db.EvaluacionDinamica,
-  {
-    foreignKey: "evaluacion_id",
-    as: "evaluacion",
-  },
-);
+db.AlertaRiesgo.belongsTo(db.EvaluacionDinamica, {
+  foreignKey: "evaluacion_id",
+  as: "evaluacion",
+});
 
 // Orden 1 — N Alertas
-db.Orden.hasMany(
-  db.AlertaRiesgo,
-  {
-    foreignKey: "orden_id",
-    as: "alertas_riesgo",
-  },
-);
+db.Orden.hasMany(db.AlertaRiesgo, {
+  foreignKey: "orden_id",
+  as: "alertas_riesgo",
+});
 
-db.AlertaRiesgo.belongsTo(
-  db.Orden,
-  {
-    foreignKey: "orden_id",
-    as: "orden",
-  },
-);
+db.AlertaRiesgo.belongsTo(db.Orden, {
+  foreignKey: "orden_id",
+  as: "orden",
+});
 
 // Usuario administrador 1 — N Alertas revisadas
-db.Usuario.hasMany(
-  db.AlertaRiesgo,
-  {
-    foreignKey:
-      "usuario_revision_id",
-    as: "alertas_riesgo_revisadas",
-  },
-);
+db.Usuario.hasMany(db.AlertaRiesgo, {
+  foreignKey: "usuario_revision_id",
+  as: "alertas_riesgo_revisadas",
+});
 
-db.AlertaRiesgo.belongsTo(
-  db.Usuario,
-  {
-    foreignKey:
-      "usuario_revision_id",
-    as: "usuario_revision",
-  },
-);
+db.AlertaRiesgo.belongsTo(db.Usuario, {
+  foreignKey: "usuario_revision_id",
+  as: "usuario_revision",
+});
 
 // Cliente 1 — N Historiales de perfil
-db.Cliente.hasMany(
-  db.HistorialPerfilRiesgo,
-  {
-    foreignKey: "cliente_id",
-    as: "historial_riesgo",
-  },
-);
+db.Cliente.hasMany(db.HistorialPerfilRiesgo, {
+  foreignKey: "cliente_id",
+  as: "historial_riesgo",
+});
 
-db.HistorialPerfilRiesgo.belongsTo(
-  db.Cliente,
-  {
-    foreignKey: "cliente_id",
-    as: "cliente",
-  },
-);
+db.HistorialPerfilRiesgo.belongsTo(db.Cliente, {
+  foreignKey: "cliente_id",
+  as: "cliente",
+});
 
 // Evaluación 1 — N cambios de perfil
-db.EvaluacionDinamica.hasMany(
-  db.HistorialPerfilRiesgo,
-  {
-    foreignKey: "evaluacion_id",
-    as: "cambios_perfil",
-  },
-);
+db.EvaluacionDinamica.hasMany(db.HistorialPerfilRiesgo, {
+  foreignKey: "evaluacion_id",
+  as: "cambios_perfil",
+});
 
-db.HistorialPerfilRiesgo.belongsTo(
-  db.EvaluacionDinamica,
-  {
-    foreignKey: "evaluacion_id",
-    as: "evaluacion",
-  },
-);
+db.HistorialPerfilRiesgo.belongsTo(db.EvaluacionDinamica, {
+  foreignKey: "evaluacion_id",
+  as: "evaluacion",
+});
+
+db.Cliente.hasMany(db.PagoEnganche, {
+  foreignKey: "cliente_id",
+  as: "pagos_enganche",
+});
+
+db.PagoEnganche.belongsTo(db.Cliente, {
+  foreignKey: "cliente_id",
+  as: "cliente",
+});
+
+db.Orden.hasOne(db.PagoEnganche, {
+  foreignKey: "orden_id",
+  as: "pago_enganche",
+});
+
+db.PagoEnganche.belongsTo(db.Orden, {
+  foreignKey: "orden_id",
+  as: "orden",
+});
+
+db.EvaluacionDinamica.hasOne(db.PagoEnganche, {
+  foreignKey: "evaluacion_id",
+  as: "pago_enganche",
+});
+
+db.PagoEnganche.belongsTo(db.EvaluacionDinamica, {
+  foreignKey: "evaluacion_id",
+  as: "evaluacion",
+});
+
+db.MetodoPago.hasMany(db.PagoEnganche, {
+  foreignKey: "metodo_pago_id",
+  as: "pagos_enganche",
+});
+
+db.PagoEnganche.belongsTo(db.MetodoPago, {
+  foreignKey: "metodo_pago_id",
+  as: "metodo_pago",
+});
 
 // =========================
 // Metadatos

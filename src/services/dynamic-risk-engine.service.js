@@ -612,7 +612,7 @@ const analizarSenalesCrediticias = ({
 const analizarSenalesFraude = ({ perfil, contexto, montoSolicitado }) => {
   const senales = [];
 
-  let puntajeFraude = Number(perfil.puntaje_fraude) || 0;
+  let puntajeFraude = 0;
 
   const dispositivoNuevo = normalizarBooleano(contexto.dispositivo_nuevo);
 
@@ -1084,7 +1084,7 @@ const generarDecision = ({
   /*
    * 4. Rechazo crediticio.
    */
-  if (puntajeCrediticio < 30 || perfil.nivel_riesgo === "critico") {
+  if (puntajeCrediticio < 30) {
     return {
       decision: DECISIONES.RECHAZO_CREDITICIO,
 
@@ -1102,7 +1102,7 @@ const generarDecision = ({
         "La capacidad de pago actual no permite aprobar el financiamiento.",
 
       explicacion:
-        "El puntaje crediticio resultante se encuentra por debajo del mínimo permitido.",
+      `El puntaje crediticio resultante fue ${puntajeCrediticio}, por debajo del minimo permitido de 30 puntos`,
     };
   }
 
@@ -1584,9 +1584,9 @@ export const evaluarCompraDinamicamente = async ({
      */
     await perfil.update(
       {
-        puntaje_crediticio: puntajeCrediticioResultante,
+        puntaje_crediticio: perfil.puntuaje_crediticio || 50,
 
-        puntaje_fraude: puntajeFraude,
+        puntaje_fraude: Number(perfil.puntuaje_fraude || 0),
 
         nivel_riesgo: nivelRiesgo,
 
@@ -1594,9 +1594,9 @@ export const evaluarCompraDinamicamente = async ({
           resultadoDecision.decision === DECISIONES.VERIFICACION_ADICIONAL ||
           resultadoDecision.decision === DECISIONES.REVISION_MANUAL,
 
-        bloqueado_preventivamente: resultadoDecision.bloqueoPreventivo,
+        bloqueado_preventivamente: Boolean(perfil.bloqueado_preventivamente),
 
-        motivo_bloqueo: resultadoDecision.bloqueoPreventivo
+        motivo_bloqueo: perfil.motivo_bloqueo 
           ? resultadoDecision.motivoPrincipal
           : null,
 
@@ -1679,6 +1679,8 @@ export const evaluarCompraDinamicamente = async ({
         severidad: senal.severidad,
 
         impacto: Number(senal.impacto_puntaje),
+
+        descripcion: senal.descripcion,
       })),
 
       alertas_generadas: alertas.length,

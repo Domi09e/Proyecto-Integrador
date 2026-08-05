@@ -332,9 +332,11 @@ export const obtenerDatosPerfil360 = async (clienteId, opciones = {}) => {
         where: {
           cliente_id: clienteId,
 
-          estado: {
-            [Op.in]: ["abierta", "en_revision", "confirmada"],
-          },
+          /*
+           * Solo las alertas confirmadas afectan
+           * el riesgo histórico del perfil.
+           */
+          estado: "confirmada",
         },
 
         attributes: ["id", "severidad", "tipo_alerta", "estado"],
@@ -358,8 +360,7 @@ export const obtenerDatosPerfil360 = async (clienteId, opciones = {}) => {
   );
 
   const financiamientosCompletados = financiamientos.filter(
-    (financiamiento) =>
-      financiamiento.estado === "pagado",
+    (financiamiento) => financiamiento.estado === "pagado",
   );
 
   const cuotasPagadas = cuotas.filter((cuota) => cuota.estado === "pagado");

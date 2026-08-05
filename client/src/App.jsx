@@ -19,6 +19,7 @@ import StoreDetailPage from "./pages/StoreDetail.jsx";
 import SplitPayment from "./pages/SplitPayments";
 import TiendaDetallePage from "./pages/TiendaDetallePage";
 import SavingsPage from "./pages/SavingPage";
+import RiskEvaluationDetails from "./pages/RiskEvaluationDetails.jsx";
 
 
 // ... dentro de <Routes> ...
@@ -57,6 +58,7 @@ function App() {
             <Route path="/cartera" element={<Cartera />} />
             <Route path="/pagos" element={<Pagos />} />
             <Route path="/ahorros" element={<SavingsPage />} />
+            <Route path="/perfil-riesgo/detalles" element={<RiskEvaluationDetails />} />
           </Route>
 
           {/* Rutas independientes: login y register */}
