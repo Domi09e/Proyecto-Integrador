@@ -1,8 +1,10 @@
 import db from "../models/index.js";
+
 import {
   evaluarCompraDinamicamente,
   DECISIONES,
 } from "../services/dynamic-risk-engine.service.js";
+
 import { recalcularPerfilRiesgoCliente } from "../services/risk-profile.service.js";
 
 const {
@@ -19,7 +21,10 @@ const {
   PagoEnganche,
 } = db;
 
-// Mapa de IDs reales según tu base de datos
+/* =====================================================
+   PLANES
+===================================================== */
+
 const PLAN_IDS = {
   "4_quincenas": 2,
   "12_meses": 3,
@@ -35,6 +40,10 @@ const MAPA_CUOTAS = {
   "12_meses": 12,
   "24_meses": 24,
 };
+
+/* =====================================================
+   HELPERS
+===================================================== */
 
 const obtenerIpCliente = (req) => {
   const forwarded = req.headers["x-forwarded-for"];
@@ -120,12 +129,31 @@ const crearCuotasFinanciamiento = async ({
   });
 };
 
-/* ==========================================
-   CHECKOUT BNPL (CREAR DEUDA CON CÁLCULO EXACTO)
-========================================== */
-/* ==========================================
-   CHECKOUT BNPL CON MOTOR DINÁMICO
-========================================== */
+const obtenerPlanPorCuotas = (numeroCuotas, cliente) => {
+  if (numeroCuotas === 4) {
+    return "4_quincenas";
+  }
+
+  if (numeroCuotas === 12) {
+    return "12_meses";
+  }
+
+  if (numeroCuotas === 24) {
+    return "24_meses";
+  }
+
+  if (numeroCuotas === 1) {
+    return cliente.preferencia_bnpl === "pago_completo"
+      ? "pago_completo"
+      : "pagar_despues";
+  }
+
+  return null;
+};
+
+/* =====================================================
+   CHECKOUT BNPL
+===================================================== */
 
 export const bnplCheckout = async (req, res) => {
   const transaction = await db.sequelize.transaction();
@@ -149,24 +177,32 @@ export const bnplCheckout = async (req, res) => {
       segundos_interaccion = 0,
     } = req.body;
 
-    const clienteId = req.user?.id;
-
-    if (!clienteId) {
-      await transaction.rollback();
-
-      return res.status(401).json({
-        message: "Cliente no autenticado.",
-      });
-    }
+    const clienteId = Number(req.user?.id);
 
     const tiendaIdNumerico = Number(tiendaId);
 
     const montoSolicitado = Number(monto);
 
+    /* ==============================
+         VALIDACIONES
+      ============================== */
+
+    if (!Number.isInteger(clienteId) || clienteId <= 0) {
+      await transaction.rollback();
+
+      return res.status(401).json({
+        success: false,
+
+        message: "Cliente no autenticado.",
+      });
+    }
+
     if (!Number.isInteger(tiendaIdNumerico) || tiendaIdNumerico <= 0) {
       await transaction.rollback();
 
       return res.status(400).json({
+        success: false,
+
         message: "La tienda indicada no es válida.",
       });
     }
@@ -175,14 +211,16 @@ export const bnplCheckout = async (req, res) => {
       await transaction.rollback();
 
       return res.status(400).json({
+        success: false,
+
         message: "El monto de la compra debe ser mayor que cero.",
       });
     }
 
-    /*
-     * Evitar que la misma sesión procese varias veces
-     * el checkout por clics repetidos.
-     */
+    /* ==============================
+         EVITAR DOBLE CLIC
+      ============================== */
+
     if (session_id) {
       const haceDosMinutos = new Date(Date.now() - 2 * 60 * 1000);
 
@@ -225,10 +263,10 @@ export const bnplCheckout = async (req, res) => {
       }
     }
 
-    /*
-     * Bloqueamos la fila del cliente mientras
-     * se procesa la evaluación y la compra.
-     */
+    /* ==============================
+         CLIENTE
+      ============================== */
+
     const cliente = await Cliente.findByPk(clienteId, {
       transaction,
 
@@ -239,6 +277,8 @@ export const bnplCheckout = async (req, res) => {
       await transaction.rollback();
 
       return res.status(404).json({
+        success: false,
+
         message: "Cliente no encontrado.",
       });
     }
@@ -247,9 +287,45 @@ export const bnplCheckout = async (req, res) => {
       await transaction.rollback();
 
       return res.status(403).json({
+        success: false,
+
         message: "La cuenta del cliente está inactiva.",
       });
     }
+
+    /* =================================================
+         REGLA ABSOLUTA:
+         LA COMPRA NO PUEDE SUPERAR EL CRÉDITO DISPONIBLE
+      ================================================= */
+
+    const creditoDisponible = Number(cliente.poder_credito || 0);
+
+    if (montoSolicitado > creditoDisponible + 0.009) {
+      await transaction.rollback();
+
+      return res.status(400).json({
+        success: false,
+
+        codigo: "MONTO_SUPERA_CREDITO_ASIGNADO",
+
+        message:
+          `Esta compra supera tu crédito disponible. ` +
+          `Tienes RD$ ${creditoDisponible.toFixed(
+            2,
+          )} disponibles y la compra es de ` +
+          `RD$ ${montoSolicitado.toFixed(2)}.`,
+
+        credito_disponible: creditoDisponible,
+
+        monto_compra: montoSolicitado,
+
+        diferencia: Number((montoSolicitado - creditoDisponible).toFixed(2)),
+      });
+    }
+
+    /* ==============================
+         TIENDA
+      ============================== */
 
     const tienda = await Tienda.findByPk(tiendaIdNumerico, {
       transaction,
@@ -259,6 +335,8 @@ export const bnplCheckout = async (req, res) => {
       await transaction.rollback();
 
       return res.status(400).json({
+        success: false,
+
         message: "La tienda no está disponible.",
       });
     }
@@ -267,10 +345,10 @@ export const bnplCheckout = async (req, res) => {
 
     const numeroCuotasSolicitadas = MAPA_CUOTAS[preferencia] || 4;
 
-    /*
-     * Ejecutar el motor antes de crear
-     * la orden y el financiamiento.
-     */
+    /* ==============================
+         MOTOR DINÁMICO
+      ============================== */
+
     const resultadoMotor = await evaluarCompraDinamicamente({
       clienteId: cliente.id,
 
@@ -313,11 +391,10 @@ export const bnplCheckout = async (req, res) => {
 
     const resultado = resultadoMotor.resultado;
 
-    /*
-     * BLOQUEAR SOLAMENTE LA OPERACIÓN.
-     * La cuenta solo se bloqueará cuando un administrador
-     * confirme la alerta y cambie bloqueado_preventivamente a true.
-     */
+    /* ==============================
+         FRAUDE
+      ============================== */
+
     if (resultado.decision === DECISIONES.BLOQUEO_FRAUDE) {
       await transaction.commit();
 
@@ -335,20 +412,26 @@ export const bnplCheckout = async (req, res) => {
       });
     }
 
-    /*
-     * RECHAZO CREDITICIO
-     */
+    /* ==============================
+         RECHAZO
+      ============================== */
+
     if (resultado.decision === DECISIONES.RECHAZO_CREDITICIO) {
-      const causasRechazo = resultadoMotor.senales
+      const causasRechazo = (resultadoMotor.senales || [])
         .filter((senal) => senal.activada && Number(senal.impacto) < 0)
         .sort((a, b) => Number(a.impacto) - Number(b.impacto))
         .slice(0, 4)
         .map((senal) => ({
           codigo: senal.codigo,
+
           nombre: senal.nombre,
+
           categoria: senal.categoria,
+
           severidad: senal.severidad,
+
           impacto: Number(senal.impacto),
+
           descripcion: senal.descripcion,
         }));
 
@@ -371,9 +454,10 @@ export const bnplCheckout = async (req, res) => {
       });
     }
 
-    /*
-     * VERIFICACIÓN ADICIONAL
-     */
+    /* ==============================
+         VERIFICACIÓN
+      ============================== */
+
     if (resultado.decision === DECISIONES.VERIFICACION_ADICIONAL) {
       await transaction.commit();
 
@@ -390,9 +474,10 @@ export const bnplCheckout = async (req, res) => {
       });
     }
 
-    /*
-     * REVISIÓN MANUAL
-     */
+    /* ==============================
+         REVISIÓN MANUAL
+      ============================== */
+
     if (resultado.decision === DECISIONES.REVISION_MANUAL) {
       await transaction.commit();
 
@@ -409,15 +494,74 @@ export const bnplCheckout = async (req, res) => {
       });
     }
 
-    /*
-     * Estas decisiones modifican el contrato.
-     * Todavía no creamos la compra porque el
-     * cliente debe aceptar primero.
-     */
+    /* =================================================
+         CORREGIR APROBACIÓN CON ENGANCHE 0 %
+      ================================================= */
+
+    const porcentajeEnganche = Number(resultado.porcentaje_enganche || 0);
+
+    const montoMotor = Number(resultado.monto_financiable || montoSolicitado);
+
+    const cuotasPermitidas = Number(
+      resultado.numero_cuotas_permitidas || numeroCuotasSolicitadas,
+    );
+
+    const mismoMonto = Math.abs(montoMotor - montoSolicitado) <= 0.01;
+
+    const mismasCuotas = cuotasPermitidas === numeroCuotasSolicitadas;
+
+    if (
+      resultado.decision === DECISIONES.APROBACION_ENGANCHE_MAYOR &&
+      porcentajeEnganche <= 0 &&
+      mismoMonto &&
+      mismasCuotas
+    ) {
+      resultado.decision = DECISIONES.APROBACION_NORMAL;
+
+      resultado.motivo = "La compra fue aprobada sin enganche.";
+
+      resultado.explicacion =
+        "El nivel de riesgo actual permite financiar el monto completo utilizando el crédito disponible.";
+    }
+
+    /* =================================================
+         REDUCCIÓN DE MONTO:
+         NO CONVERTIR LA DIFERENCIA EN ENGANCHE
+      ================================================= */
+
+    if (
+      resultado.decision === DECISIONES.MONTO_REDUCIDO &&
+      montoMotor < montoSolicitado - 0.009
+    ) {
+      await transaction.commit();
+
+      return res.status(409).json({
+        success: false,
+
+        codigo: "REDUCIR_MONTO_COMPRA",
+
+        message:
+          `El motor recomienda reducir el monto de la compra a ` +
+          `RD$ ${montoMotor.toFixed(2)} o menos.`,
+
+        evaluacion_id: resultadoMotor.evaluacion_id,
+
+        monto_original: montoSolicitado,
+
+        monto_maximo_permitido: montoMotor,
+
+        requiere_modificar_compra: true,
+
+        resultado,
+      });
+    }
+
+    /* =================================================
+         PROPUESTAS AJUSTADAS
+      ================================================= */
+
     const decisionesAjustadas = [
       DECISIONES.APROBACION_ENGANCHE_MAYOR,
-
-      DECISIONES.MONTO_REDUCIDO,
 
       DECISIONES.CUOTAS_REDUCIDAS,
     ];
@@ -431,7 +575,7 @@ export const bnplCheckout = async (req, res) => {
         codigo: "CONDICIONES_AJUSTADAS_REQUIEREN_ACEPTACION",
 
         message:
-          "El motor aprobó condiciones diferentes a las solicitadas. Debes aceptar la nueva propuesta para continuar.",
+          "El motor aprobó condiciones diferentes. Debes aceptar la nueva propuesta para continuar.",
 
         evaluacion_id: resultadoMotor.evaluacion_id,
 
@@ -440,13 +584,13 @@ export const bnplCheckout = async (req, res) => {
 
           monto_original: montoSolicitado,
 
-          monto_financiable: Number(resultado.monto_financiable),
+          monto_financiable: montoMotor,
 
-          porcentaje_enganche: Number(resultado.porcentaje_enganche),
+          porcentaje_enganche: porcentajeEnganche,
 
           numero_cuotas_solicitadas: numeroCuotasSolicitadas,
 
-          numero_cuotas_permitidas: Number(resultado.numero_cuotas_permitidas),
+          numero_cuotas_permitidas: cuotasPermitidas,
 
           motivo: resultado.motivo,
 
@@ -455,26 +599,23 @@ export const bnplCheckout = async (req, res) => {
       });
     }
 
-    const porcentajeEnganche = Number(resultado.porcentaje_enganche) || 0;
+    /* =================================================
+         APROBACIÓN NORMAL CON ENGANCHE REAL
+      ================================================= */
 
-    /*
-     * Aunque el motor diga aprobación normal,
-     * cualquier enganche modifica las condiciones
-     * y debe ser aceptado antes de crear la compra.
-     */
     if (
       resultado.decision === DECISIONES.APROBACION_NORMAL &&
       porcentajeEnganche > 0
     ) {
-      await transaction.commit();
-
       const montoEnganche = Number(
         (montoSolicitado * (porcentajeEnganche / 100)).toFixed(2),
       );
 
-      const montoDespuesEnganche = Number(
+      const montoFinanciable = Number(
         (montoSolicitado - montoEnganche).toFixed(2),
       );
+
+      await transaction.commit();
 
       return res.status(409).json({
         success: false,
@@ -490,13 +631,15 @@ export const bnplCheckout = async (req, res) => {
 
           monto_original: montoSolicitado,
 
-          porcentaje_enganche: porcentajeEnganche,
+          monto_financiable: montoFinanciable,
 
           monto_enganche: montoEnganche,
 
-          monto_financiable: montoDespuesEnganche,
+          porcentaje_enganche: porcentajeEnganche,
 
-          numero_cuotas: Number(resultado.numero_cuotas_permitidas),
+          numero_cuotas_solicitadas: numeroCuotasSolicitadas,
+
+          numero_cuotas_permitidas: cuotasPermitidas,
 
           motivo: resultado.motivo,
 
@@ -505,10 +648,10 @@ export const bnplCheckout = async (req, res) => {
       });
     }
 
-    /*
-     * Solo continuamos automáticamente
-     * con aprobación normal.
-     */
+    /* ==============================
+         SOLO APROBACIÓN NORMAL
+      ============================== */
+
     if (resultado.decision !== DECISIONES.APROBACION_NORMAL) {
       await transaction.commit();
 
@@ -525,15 +668,11 @@ export const bnplCheckout = async (req, res) => {
       });
     }
 
-    const creditoDisponible = Number(cliente.poder_credito) || 0;
+    const montoFinanciable = Number(
+      resultado.monto_financiable || montoSolicitado,
+    );
 
-    const montoFinanciable = Number(resultado.monto_financiable);
-
-    if (montoFinanciable > creditoDisponible) {
-      /*
-       * La evaluación se conserva, pero no
-       * se crea la compra.
-       */
+    if (montoFinanciable > creditoDisponible + 0.009) {
       await transaction.commit();
 
       return res.status(400).json({
@@ -541,21 +680,13 @@ export const bnplCheckout = async (req, res) => {
 
         codigo: "CREDITO_DISPONIBLE_INSUFICIENTE",
 
-        message: `Crédito insuficiente. Tienes RD$ ${creditoDisponible.toFixed(2)} disponibles.`,
-
-        evaluacion_id: resultadoMotor.evaluacion_id,
-
-        resultado,
+        message: `Crédito insuficiente. Tienes RD$ ${creditoDisponible.toFixed(
+          2,
+        )} disponibles.`,
       });
     }
 
-    const numeroCuotasPermitidas = Number(resultado.numero_cuotas_permitidas);
-
-    /*
-     * En aprobación normal las cuotas deben
-     * coincidir con el plan solicitado.
-     */
-    if (numeroCuotasPermitidas !== numeroCuotasSolicitadas) {
+    if (cuotasPermitidas !== numeroCuotasSolicitadas) {
       await transaction.commit();
 
       return res.status(409).json({
@@ -569,11 +700,21 @@ export const bnplCheckout = async (req, res) => {
         evaluacion_id: resultadoMotor.evaluacion_id,
 
         propuesta: {
-          numero_cuotas_solicitadas: numeroCuotasSolicitadas,
+          decision: DECISIONES.CUOTAS_REDUCIDAS,
 
-          numero_cuotas_permitidas: numeroCuotasPermitidas,
+          monto_original: montoSolicitado,
 
           monto_financiable: montoFinanciable,
+
+          porcentaje_enganche: 0,
+
+          numero_cuotas_solicitadas: numeroCuotasSolicitadas,
+
+          numero_cuotas_permitidas: cuotasPermitidas,
+
+          motivo: resultado.motivo,
+
+          explicacion: resultado.explicacion,
         },
       });
     }
@@ -584,13 +725,16 @@ export const bnplCheckout = async (req, res) => {
       await transaction.rollback();
 
       return res.status(400).json({
+        success: false,
+
         message: "La preferencia BNPL seleccionada no tiene un plan válido.",
       });
     }
 
-    /*
-     * Crear la orden una vez aprobada.
-     */
+    /* ==============================
+         CREAR ORDEN
+      ============================== */
+
     const orden = await Orden.create(
       {
         cliente_id: cliente.id,
@@ -608,10 +752,6 @@ export const bnplCheckout = async (req, res) => {
       },
     );
 
-    /*
-     * Vincular la evaluación y sus alertas
-     * con la orden recién creada.
-     */
     await EvaluacionDinamica.update(
       {
         orden_id: orden.id,
@@ -664,17 +804,13 @@ export const bnplCheckout = async (req, res) => {
 
       montoTotal: montoFinanciable,
 
-      numeroCuotas: numeroCuotasPermitidas,
+      numeroCuotas: cuotasPermitidas,
 
       preferencia,
 
       transaction,
     });
 
-    /*
-     * Descontar únicamente el monto que
-     * realmente fue financiado.
-     */
     cliente.poder_credito = Number(
       (creditoDisponible - montoFinanciable).toFixed(2),
     );
@@ -683,10 +819,6 @@ export const bnplCheckout = async (req, res) => {
       transaction,
     });
 
-    /*
-     * Actualizar el perfil 360 con la deuda
-     * que acaba de crearse.
-     */
     await recalcularPerfilRiesgoCliente(cliente.id, {
       transaction,
     });
@@ -701,7 +833,9 @@ export const bnplCheckout = async (req, res) => {
 
         titulo: "Nueva venta BNPL",
 
-        mensaje: `Cliente ${cliente.nombre} compró RD$ ${montoSolicitado.toFixed(2)} en ${tienda.nombre}. Decisión: ${resultado.decision}.`,
+        mensaje:
+          `Cliente ${cliente.nombre} compró ` +
+          `RD$ ${montoSolicitado.toFixed(2)} en ${tienda.nombre}.`,
 
         url: "/admin/clientes",
 
@@ -713,10 +847,6 @@ export const bnplCheckout = async (req, res) => {
           evaluacion_id: resultadoMotor.evaluacion_id,
 
           decision: resultado.decision,
-
-          puntaje_crediticio: resultado.puntaje_crediticio,
-
-          puntaje_fraude: resultado.puntaje_fraude,
         }),
       },
       {
@@ -734,7 +864,10 @@ export const bnplCheckout = async (req, res) => {
 
         titulo: "Compra aprobada",
 
-        mensaje: `Compra en ${tienda.nombre} por RD$ ${montoSolicitado.toFixed(2)}. Nuevo saldo disponible: RD$ ${Number(cliente.poder_credito).toFixed(2)}.`,
+        mensaje:
+          `Compra en ${tienda.nombre} por RD$ ` +
+          `${montoSolicitado.toFixed(2)}. Nuevo saldo disponible: RD$ ` +
+          `${Number(cliente.poder_credito).toFixed(2)}.`,
 
         url: "/cartera",
 
@@ -773,19 +906,11 @@ export const bnplCheckout = async (req, res) => {
 
         monto_financiado: montoFinanciable,
 
-        porcentaje_enganche: Number(resultado.porcentaje_enganche),
+        porcentaje_enganche: 0,
 
-        numero_cuotas: numeroCuotasPermitidas,
+        numero_cuotas: cuotasPermitidas,
 
-        preferencia: preferencia,
-      },
-
-      riesgo: {
-        puntaje_crediticio: resultado.puntaje_crediticio,
-
-        puntaje_fraude: resultado.puntaje_fraude,
-
-        nivel_riesgo: resultado.nivel_riesgo,
+        preferencia,
       },
 
       nuevo_credito_disponible: Number(cliente.poder_credito),
@@ -800,10 +925,17 @@ export const bnplCheckout = async (req, res) => {
     return res.status(error.status || 500).json({
       success: false,
 
+      codigo: error.codigo || "ERROR_CHECKOUT",
+
       message: error.message || "Error interno al procesar la compra.",
     });
   }
 };
+
+/* =====================================================
+   COBRO SIMULADO DEL ENGANCHE
+===================================================== */
+
 const procesarCobroEnganche = async ({ metodoPago, monto, evaluacionId }) => {
   const montoNumerico = Number(monto);
 
@@ -811,33 +943,30 @@ const procesarCobroEnganche = async ({ metodoPago, monto, evaluacionId }) => {
     throw new Error("El monto del enganche no es válido.");
   }
 
-  if (!metodoPago.token_gateway) {
+  if (!metodoPago?.token_gateway) {
     const error = new Error(
       "El método de pago no está habilitado para realizar cobros.",
     );
 
     error.status = 400;
+
     error.codigo = "METODO_PAGO_SIN_TOKEN";
 
     throw error;
   }
 
-  /*
-   * Simulación académica del cobro.
-   * Más adelante aquí se conectaría una pasarela real.
-   */
-  const referencia = `ENG-${evaluacionId}-${Date.now()}`;
-
   return {
     aprobado: true,
-    referencia,
+
+    referencia: `ENG-${evaluacionId}-${Date.now()}`,
+
     mensaje: "Cobro simulado aprobado correctamente.",
   };
 };
 
-/* ==========================================
-   ACEPTAR PROPUESTA AJUSTADA DEL MOTOR
-========================================== */
+/* =====================================================
+   ACEPTAR PROPUESTA
+===================================================== */
 
 export const acceptRiskProposal = async (req, res) => {
   const transaction = await db.sequelize.transaction();
@@ -858,6 +987,7 @@ export const acceptRiskProposal = async (req, res) => {
 
       return res.status(401).json({
         success: false,
+
         message: "Cliente no autenticado.",
       });
     }
@@ -867,6 +997,7 @@ export const acceptRiskProposal = async (req, res) => {
 
       return res.status(400).json({
         success: false,
+
         message: "La evaluación indicada no es válida.",
       });
     }
@@ -876,28 +1007,15 @@ export const acceptRiskProposal = async (req, res) => {
 
       return res.status(400).json({
         success: false,
+
         message: "La tienda indicada no es válida.",
       });
     }
 
-    if (!Number.isInteger(metodoPagoId) || metodoPagoId <= 0) {
-      await transaction.rollback();
-
-      return res.status(400).json({
-        success: false,
-        codigo: "METODO_PAGO_REQUERIDO",
-
-        message: "Debes seleccionar un método de pago para pagar el enganche.",
-      });
-    }
-
-    /*
-     * Bloquea la evaluación para evitar
-     * aceptar la propuesta dos veces.
-     */
     const evaluacion = await EvaluacionDinamica.findOne({
       where: {
         id: evaluacionId,
+
         cliente_id: clienteId,
       },
 
@@ -912,7 +1030,7 @@ export const acceptRiskProposal = async (req, res) => {
       return res.status(404).json({
         success: false,
 
-        message: "No se encontró la propuesta de financiamiento.",
+        message: "No se encontró la propuesta.",
       });
     }
 
@@ -928,16 +1046,10 @@ export const acceptRiskProposal = async (req, res) => {
       });
     }
 
-    /*
-     * APROBACION_NORMAL también puede llegar aquí
-     * cuando la compra requiere enganche.
-     */
     const decisionesAceptables = [
       DECISIONES.APROBACION_NORMAL,
 
       DECISIONES.APROBACION_ENGANCHE_MAYOR,
-
-      DECISIONES.MONTO_REDUCIDO,
 
       DECISIONES.CUOTAS_REDUCIDAS,
     ];
@@ -954,9 +1066,6 @@ export const acceptRiskProposal = async (req, res) => {
       });
     }
 
-    /*
-     * Buscar y bloquear al cliente.
-     */
     const cliente = await Cliente.findByPk(clienteId, {
       transaction,
 
@@ -968,6 +1077,7 @@ export const acceptRiskProposal = async (req, res) => {
 
       return res.status(404).json({
         success: false,
+
         message: "Cliente no encontrado.",
       });
     }
@@ -978,54 +1088,10 @@ export const acceptRiskProposal = async (req, res) => {
       return res.status(403).json({
         success: false,
 
-        message: "La cuenta del cliente está inactiva.",
+        message: "La cuenta está inactiva.",
       });
     }
 
-    /*
-     * Buscar el método seleccionado y validar
-     * que pertenezca al cliente.
-     */
-    const metodoPago = await MetodoPago.findOne({
-      where: {
-        id: metodoPagoId,
-        cliente_id: clienteId,
-      },
-
-      transaction,
-
-      lock: transaction.LOCK.UPDATE,
-    });
-
-    if (!metodoPago) {
-      await transaction.rollback();
-
-      return res.status(400).json({
-        success: false,
-
-        codigo: "METODO_PAGO_INVALIDO",
-
-        message:
-          "El método de pago seleccionado no existe o no pertenece a tu cuenta.",
-      });
-    }
-
-    if (!metodoPago.token_gateway) {
-      await transaction.rollback();
-
-      return res.status(400).json({
-        success: false,
-
-        codigo: "METODO_PAGO_SIN_TOKEN",
-
-        message:
-          "El método de pago seleccionado no está habilitado para realizar cobros.",
-      });
-    }
-
-    /*
-     * Validar la tienda.
-     */
     const tienda = await Tienda.findByPk(tiendaId, {
       transaction,
     });
@@ -1040,41 +1106,6 @@ export const acceptRiskProposal = async (req, res) => {
       });
     }
 
-    /*
-     * Evitar cobrar dos veces la misma propuesta.
-     */
-    const pagoEngancheExistente = await PagoEnganche.findOne({
-      where: {
-        evaluacion_id: evaluacion.id,
-      },
-
-      transaction,
-
-      lock: transaction.LOCK.UPDATE,
-    });
-
-    if (pagoEngancheExistente) {
-      await transaction.rollback();
-
-      return res.status(409).json({
-        success: false,
-
-        codigo: "ENGANCHE_YA_PROCESADO",
-
-        message:
-          pagoEngancheExistente.estado === "aprobado"
-            ? "El enganche de esta propuesta ya fue pagado."
-            : "Ya existe un intento de pago para esta propuesta.",
-
-        pago_enganche_id: pagoEngancheExistente.id,
-
-        estado: pagoEngancheExistente.estado,
-      });
-    }
-
-    /*
-     * Leer condiciones guardadas por el motor.
-     */
     const montoOriginal = Number(
       evaluacion.monto_original || evaluacion.monto_solicitado,
     );
@@ -1091,7 +1122,29 @@ export const acceptRiskProposal = async (req, res) => {
       return res.status(400).json({
         success: false,
 
-        message: "El monto original de la propuesta no es válido.",
+        message: "El monto original no es válido.",
+      });
+    }
+
+    const creditoDisponible = Number(cliente.poder_credito || 0);
+
+    /* =================================================
+         SEGUNDA PROTECCIÓN:
+         TAMPOCO UNA PROPUESTA VIEJA PUEDE SUPERAR CRÉDITO
+      ================================================= */
+
+    if (montoOriginal > creditoDisponible + 0.009) {
+      await transaction.rollback();
+
+      return res.status(400).json({
+        success: false,
+
+        codigo: "MONTO_SUPERA_CREDITO_ASIGNADO",
+
+        message:
+          `No puedes aceptar esta propuesta porque la compra de ` +
+          `RD$ ${montoOriginal.toFixed(2)} supera tu crédito disponible de ` +
+          `RD$ ${creditoDisponible.toFixed(2)}.`,
       });
     }
 
@@ -1101,7 +1154,7 @@ export const acceptRiskProposal = async (req, res) => {
       return res.status(400).json({
         success: false,
 
-        message: "El monto financiable de la propuesta no es válido.",
+        message: "El monto financiable no es válido.",
       });
     }
 
@@ -1125,61 +1178,48 @@ export const acceptRiskProposal = async (req, res) => {
       return res.status(400).json({
         success: false,
 
-        message: "El número de cuotas autorizado no es válido.",
+        message: "El número de cuotas no es válido.",
       });
     }
 
-    /*
-     * Aplicar simultáneamente:
-     *
-     * 1. El límite del motor.
-     * 2. El porcentaje de enganche.
-     */
-    const financiablePorEnganche =
-      montoOriginal * (1 - porcentajeEnganche / 100);
-
-    const montoFinanciable = Number(
-      Math.min(
-        montoMaximoMotor,
-
-        financiablePorEnganche,
-      ).toFixed(2),
+    const financiablePorEnganche = Number(
+      (montoOriginal * (1 - porcentajeEnganche / 100)).toFixed(2),
     );
 
-    /*
-     * Todo lo que no se financia
-     * será pagado inmediatamente.
-     */
+    /* =================================================
+         IMPORTANTE:
+         SI EL MOTOR REDUJO EL MONTO MÁS DE LO EXPLICADO
+         POR EL ENGANCHE, NO CONVERTIMOS ESA DIFERENCIA
+         EN UN ENGANCHE OCULTO.
+      ================================================= */
+
+    if (montoMaximoMotor < financiablePorEnganche - 0.009) {
+      await transaction.rollback();
+
+      return res.status(409).json({
+        success: false,
+
+        codigo: "REDUCIR_MONTO_COMPRA",
+
+        message:
+          `Debes reducir realmente el total de la compra a ` +
+          `RD$ ${montoMaximoMotor.toFixed(2)} o menos antes de continuar.`,
+
+        monto_original: montoOriginal,
+
+        monto_maximo_permitido: montoMaximoMotor,
+
+        requiere_modificar_compra: true,
+      });
+    }
+
+    const montoFinanciable = financiablePorEnganche;
+
     const montoEnganche = Number((montoOriginal - montoFinanciable).toFixed(2));
 
-    if (montoFinanciable <= 0) {
-      await transaction.rollback();
+    const requiereEnganche = montoEnganche > 0.009;
 
-      return res.status(400).json({
-        success: false,
-
-        message: "La propuesta no contiene un monto financiable válido.",
-      });
-    }
-
-    if (montoEnganche <= 0) {
-      await transaction.rollback();
-
-      return res.status(400).json({
-        success: false,
-
-        codigo: "PROPUESTA_SIN_ENGANCHE",
-
-        message: "Esta propuesta no requiere un pago de enganche.",
-      });
-    }
-
-    /*
-     * Validar crédito disponible.
-     */
-    const creditoDisponible = Number(cliente.poder_credito || 0);
-
-    if (montoFinanciable > creditoDisponible) {
+    if (montoFinanciable > creditoDisponible + 0.009) {
       await transaction.rollback();
 
       return res.status(400).json({
@@ -1187,30 +1227,100 @@ export const acceptRiskProposal = async (req, res) => {
 
         codigo: "CREDITO_DISPONIBLE_INSUFICIENTE",
 
-        message: `Crédito insuficiente. Tienes RD$ ${creditoDisponible.toFixed(
-          2,
-        )} disponibles.`,
+        message:
+          `Crédito insuficiente. Tienes RD$ ` +
+          `${creditoDisponible.toFixed(2)} disponibles.`,
       });
     }
 
-    /*
-     * Elegir el plan correcto de acuerdo
-     * con las cuotas autorizadas.
-     */
-    let preferenciaAutorizada;
+    let metodoPago = null;
 
-    if (numeroCuotas === 4) {
-      preferenciaAutorizada = "4_quincenas";
-    } else if (numeroCuotas === 12) {
-      preferenciaAutorizada = "12_meses";
-    } else if (numeroCuotas === 24) {
-      preferenciaAutorizada = "24_meses";
-    } else if (numeroCuotas === 1) {
-      preferenciaAutorizada =
-        cliente.preferencia_bnpl === "pago_completo"
-          ? "pago_completo"
-          : "pagar_despues";
-    } else {
+    let resultadoCobro = null;
+
+    let pagoEnganche = null;
+
+    /* ==============================
+         MÉTODO SOLO SI HAY ENGANCHE
+      ============================== */
+
+    if (requiereEnganche) {
+      if (!Number.isInteger(metodoPagoId) || metodoPagoId <= 0) {
+        await transaction.rollback();
+
+        return res.status(400).json({
+          success: false,
+
+          codigo: "METODO_PAGO_REQUERIDO",
+
+          message:
+            "Debes seleccionar un método de pago para pagar el enganche.",
+        });
+      }
+
+      const pagoExistente = await PagoEnganche.findOne({
+        where: {
+          evaluacion_id: evaluacion.id,
+        },
+
+        transaction,
+
+        lock: transaction.LOCK.UPDATE,
+      });
+
+      if (pagoExistente) {
+        await transaction.rollback();
+
+        return res.status(409).json({
+          success: false,
+
+          codigo: "ENGANCHE_YA_PROCESADO",
+
+          message: "Ya existe un pago de enganche para esta evaluación.",
+        });
+      }
+
+      metodoPago = await MetodoPago.findOne({
+        where: {
+          id: metodoPagoId,
+
+          cliente_id: clienteId,
+        },
+
+        transaction,
+
+        lock: transaction.LOCK.UPDATE,
+      });
+
+      if (!metodoPago) {
+        await transaction.rollback();
+
+        return res.status(400).json({
+          success: false,
+
+          codigo: "METODO_PAGO_INVALIDO",
+
+          message:
+            "El método de pago seleccionado no existe o no pertenece a tu cuenta.",
+        });
+      }
+
+      if (!metodoPago.token_gateway) {
+        await transaction.rollback();
+
+        return res.status(400).json({
+          success: false,
+
+          codigo: "METODO_PAGO_SIN_TOKEN",
+
+          message:
+            "El método seleccionado no está habilitado para realizar cobros.",
+        });
+      }
+    }
+
+    const preferenciaAutorizada = obtenerPlanPorCuotas(numeroCuotas, cliente);
+
+    if (!preferenciaAutorizada) {
       await transaction.rollback();
 
       return res.status(400).json({
@@ -1219,27 +1329,12 @@ export const acceptRiskProposal = async (req, res) => {
         codigo: "CUOTAS_NO_COMPATIBLES",
 
         message:
-          "El número de cuotas aprobado no corresponde a un plan BNPL disponible.",
+          "El número de cuotas aprobado no corresponde a un plan disponible.",
       });
     }
 
     const planIdReal = PLAN_IDS[preferenciaAutorizada];
 
-    if (!planIdReal) {
-      await transaction.rollback();
-
-      return res.status(400).json({
-        success: false,
-
-        message: "El plan BNPL autorizado no es válido.",
-      });
-    }
-
-    /*
-     * Crear la orden.
-     * Si algo falla después, toda la transacción
-     * se revierte.
-     */
     const orden = await Orden.create(
       {
         cliente_id: cliente.id,
@@ -1257,70 +1352,59 @@ export const acceptRiskProposal = async (req, res) => {
       },
     );
 
-    /*
-     * Procesar el cobro simulado.
-     */
-    const resultadoCobro = await procesarCobroEnganche({
-      metodoPago,
-
-      monto: montoEnganche,
-
-      evaluacionId: evaluacion.id,
-    });
-
-    if (!resultadoCobro.aprobado) {
-      await transaction.rollback();
-
-      return res.status(402).json({
-        success: false,
-
-        codigo: "PAGO_ENGANCHE_RECHAZADO",
-
-        message:
-          resultadoCobro.mensaje || "El método de pago rechazó el enganche.",
-      });
-    }
-
-    /*
-     * Registrar el enganche.
-     */
-    const pagoEnganche = await PagoEnganche.create(
-      {
-        cliente_id: cliente.id,
-
-        orden_id: orden.id,
-
-        evaluacion_id: evaluacion.id,
-
-        metodo_pago_id: metodoPago.id,
+    if (requiereEnganche) {
+      resultadoCobro = await procesarCobroEnganche({
+        metodoPago,
 
         monto: montoEnganche,
 
-        estado: "aprobado",
+        evaluacionId: evaluacion.id,
+      });
 
-        referencia_gateway: resultadoCobro.referencia,
+      if (!resultadoCobro.aprobado) {
+        await transaction.rollback();
 
-        mensaje_gateway: resultadoCobro.mensaje,
+        return res.status(402).json({
+          success: false,
 
-        fecha_pago: new Date(),
-      },
-      {
-        transaction,
-      },
-    );
+          codigo: "PAGO_ENGANCHE_RECHAZADO",
 
-    /*
-     * Marcar la evaluación como utilizada.
-     */
+          message: resultadoCobro.mensaje || "El enganche fue rechazado.",
+        });
+      }
+
+      pagoEnganche = await PagoEnganche.create(
+        {
+          cliente_id: cliente.id,
+
+          orden_id: orden.id,
+
+          evaluacion_id: evaluacion.id,
+
+          metodo_pago_id: metodoPago.id,
+
+          monto: montoEnganche,
+
+          estado: "aprobado",
+
+          referencia_gateway: resultadoCobro.referencia,
+
+          mensaje_gateway: resultadoCobro.mensaje,
+
+          fecha_pago: new Date(),
+        },
+        {
+          transaction,
+        },
+      );
+    }
+
     evaluacion.orden_id = orden.id;
 
     await evaluacion.save({
       transaction,
     });
 
-    /*
-     * Vincular las alertas con la orden.
-     */
     await AlertaRiesgo.update(
       {
         orden_id: orden.id,
@@ -1336,10 +1420,6 @@ export const acceptRiskProposal = async (req, res) => {
       },
     );
 
-    /*
-     * Crear el financiamiento únicamente
-     * por el monto restante.
-     */
     const pagoBnpl = await PagoBNPL.create(
       {
         orden_id: orden.id,
@@ -1359,9 +1439,6 @@ export const acceptRiskProposal = async (req, res) => {
       },
     );
 
-    /*
-     * Crear las cuotas.
-     */
     await crearCuotasFinanciamiento({
       pagoBnplId: pagoBnpl.id,
 
@@ -1374,10 +1451,6 @@ export const acceptRiskProposal = async (req, res) => {
       transaction,
     });
 
-    /*
-     * Descontar únicamente el monto financiado
-     * del crédito disponible.
-     */
     cliente.poder_credito = Number(
       (creditoDisponible - montoFinanciable).toFixed(2),
     );
@@ -1386,22 +1459,19 @@ export const acceptRiskProposal = async (req, res) => {
       transaction,
     });
 
-    /*
-     * Recalcular el perfil de riesgo.
-     */
     await recalcularPerfilRiesgoCliente(cliente.id, {
       transaction,
     });
 
-    const marcaMetodo = metodoPago.marca || metodoPago.tipo || "Método de pago";
+    const marcaMetodo = requiereEnganche
+      ? metodoPago?.marca || metodoPago?.tipo || "Método de pago"
+      : null;
 
-    const ultimosDigitos = metodoPago.ultimos_cuatro_digitos
-      ? ` •••• ${metodoPago.ultimos_cuatro_digitos}`
-      : "";
+    const ultimosDigitos =
+      requiereEnganche && metodoPago?.ultimos_cuatro_digitos
+        ? ` •••• ${metodoPago.ultimos_cuatro_digitos}`
+        : "";
 
-    /*
-     * Notificación del cliente.
-     */
     await Notificacion.create(
       {
         rol_destino: "cliente",
@@ -1412,12 +1482,13 @@ export const acceptRiskProposal = async (req, res) => {
 
         titulo: "Propuesta BNPL aceptada",
 
-        mensaje:
-          `Pagaste un enganche de RD$ ${montoEnganche.toFixed(2)} con ` +
-          `${marcaMetodo}${ultimosDigitos}. ` +
-          `El monto financiado es RD$ ${montoFinanciable.toFixed(
-            2,
-          )} en ${numeroCuotas} cuota(s).`,
+        mensaje: requiereEnganche
+          ? `Pagaste un enganche de RD$ ${montoEnganche.toFixed(
+              2,
+            )} con ${marcaMetodo}${ultimosDigitos}. ` +
+            `El monto financiado es RD$ ${montoFinanciable.toFixed(2)}.`
+          : `Aceptaste la propuesta sin enganche. ` +
+            `Se financiaron RD$ ${montoFinanciable.toFixed(2)}.`,
 
         url: "/cartera",
 
@@ -1428,11 +1499,9 @@ export const acceptRiskProposal = async (req, res) => {
 
           pago_bnpl_id: pagoBnpl.id,
 
-          pago_enganche_id: pagoEnganche.id,
+          pago_enganche_id: pagoEnganche?.id || null,
 
           evaluacion_id: evaluacion.id,
-
-          decision: evaluacion.decision,
 
           monto_original: montoOriginal,
 
@@ -1441,12 +1510,6 @@ export const acceptRiskProposal = async (req, res) => {
           porcentaje_enganche: porcentajeEnganche,
 
           monto_enganche: montoEnganche,
-
-          numero_cuotas: numeroCuotas,
-
-          metodo_pago_id: metodoPago.id,
-
-          referencia_gateway: resultadoCobro.referencia,
         }),
       },
       {
@@ -1454,9 +1517,6 @@ export const acceptRiskProposal = async (req, res) => {
       },
     );
 
-    /*
-     * Notificación del administrador.
-     */
     await Notificacion.create(
       {
         rol_destino: "admin",
@@ -1467,10 +1527,13 @@ export const acceptRiskProposal = async (req, res) => {
 
         titulo: "Propuesta BNPL aceptada",
 
-        mensaje:
-          `El cliente ${cliente.nombre} pagó un enganche de ` +
-          `RD$ ${montoEnganche.toFixed(2)} y financió ` +
-          `RD$ ${montoFinanciable.toFixed(2)} en ${tienda.nombre}.`,
+        mensaje: requiereEnganche
+          ? `${cliente.nombre} pagó RD$ ${montoEnganche.toFixed(
+              2,
+            )} de enganche y financió RD$ ${montoFinanciable.toFixed(2)}.`
+          : `${cliente.nombre} financió RD$ ${montoFinanciable.toFixed(
+              2,
+            )} sin enganche.`,
 
         url: "/admin/clientes",
 
@@ -1481,27 +1544,7 @@ export const acceptRiskProposal = async (req, res) => {
 
           orden_id: orden.id,
 
-          pago_bnpl_id: pagoBnpl.id,
-
-          pago_enganche_id: pagoEnganche.id,
-
           evaluacion_id: evaluacion.id,
-
-          decision: evaluacion.decision,
-
-          monto_original: montoOriginal,
-
-          monto_financiable: montoFinanciable,
-
-          porcentaje_enganche: porcentajeEnganche,
-
-          monto_enganche: montoEnganche,
-
-          numero_cuotas: numeroCuotas,
-
-          metodo_pago_id: metodoPago.id,
-
-          referencia_gateway: resultadoCobro.referencia,
         }),
       },
       {
@@ -1514,8 +1557,9 @@ export const acceptRiskProposal = async (req, res) => {
     return res.status(201).json({
       success: true,
 
-      message:
-        "El enganche fue pagado y el financiamiento fue creado correctamente.",
+      message: requiereEnganche
+        ? "El enganche fue pagado y el financiamiento fue creado correctamente."
+        : "La propuesta fue aceptada y el financiamiento fue creado sin enganche.",
 
       orden_id: orden.id,
 
@@ -1523,19 +1567,17 @@ export const acceptRiskProposal = async (req, res) => {
 
       evaluacion_id: evaluacion.id,
 
-      decision: evaluacion.decision,
+      pago_enganche: pagoEnganche
+        ? {
+            id: pagoEnganche.id,
 
-      pago_enganche: {
-        id: pagoEnganche.id,
+            monto: montoEnganche,
 
-        monto: montoEnganche,
+            estado: pagoEnganche.estado,
 
-        estado: pagoEnganche.estado,
-
-        metodo: `${marcaMetodo}${ultimosDigitos}`,
-
-        referencia: resultadoCobro.referencia,
-      },
+            referencia: resultadoCobro?.referencia,
+          }
+        : null,
 
       condiciones: {
         monto_original: montoOriginal,
@@ -1570,226 +1612,567 @@ export const acceptRiskProposal = async (req, res) => {
   }
 };
 
-/* ==========================================
-   PAGAR UNA CUOTA Y EVALUAR PUNTUALIDAD
-========================================== */
-export const payInstallment = async (req, res) => {
-  const t = await db.sequelize.transaction();
-  try {
-    // Recibimos cuota_id Y metodo_pago_id
-    const { cuota_id, metodo_pago_id } = req.body;
-    const userId = req.user.id;
+/* =====================================================
+   SOLICITAR OPCIÓN SIN ENGANCHE
+===================================================== */
 
-    // --- 1. VALIDACIÓN DE MÉTODO DE PAGO (NUEVO) ---
-    if (!metodo_pago_id) {
-      await t.rollback();
-      return res
-        .status(400)
-        .json({ message: "Debes seleccionar un método de pago." });
+export const requestNoDownPayment = async (req, res) => {
+  const transaction = await db.sequelize.transaction();
+
+  try {
+    const { evaluacion_id, tienda_id } = req.body;
+
+    const clienteId = Number(req.user?.id);
+
+    const evaluacionId = Number(evaluacion_id);
+
+    const tiendaId = Number(tienda_id);
+
+    if (!Number.isInteger(clienteId) || clienteId <= 0) {
+      await transaction.rollback();
+
+      return res.status(401).json({
+        success: false,
+
+        message: "Cliente no autenticado.",
+      });
     }
 
-    // Verificar que el método exista y pertenezca al cliente
-    const metodo = await db.MetodoPago.findOne({
-      where: { id: metodo_pago_id, cliente_id: userId },
+    const evaluacion = await EvaluacionDinamica.findOne({
+      where: {
+        id: evaluacionId,
+
+        cliente_id: clienteId,
+      },
+
+      transaction,
+
+      lock: transaction.LOCK.UPDATE,
+    });
+
+    if (!evaluacion) {
+      await transaction.rollback();
+
+      return res.status(404).json({
+        success: false,
+
+        codigo: "EVALUACION_NO_ENCONTRADA",
+
+        message: "No se encontró la evaluación.",
+      });
+    }
+
+    if (evaluacion.orden_id) {
+      await transaction.rollback();
+
+      return res.status(409).json({
+        success: false,
+
+        codigo: "PROPUESTA_YA_UTILIZADA",
+
+        message: "Esta propuesta ya fue utilizada.",
+      });
+    }
+
+    const cliente = await Cliente.findByPk(clienteId, {
+      transaction,
+
+      lock: transaction.LOCK.UPDATE,
+    });
+
+    if (!cliente) {
+      await transaction.rollback();
+
+      return res.status(404).json({
+        success: false,
+
+        message: "Cliente no encontrado.",
+      });
+    }
+
+    const tienda = await Tienda.findByPk(tiendaId, {
+      transaction,
+    });
+
+    if (!tienda || tienda.estado !== "activa") {
+      await transaction.rollback();
+
+      return res.status(400).json({
+        success: false,
+
+        message: "La tienda no está disponible.",
+      });
+    }
+
+    const montoOriginal = Number(
+      evaluacion.monto_original || evaluacion.monto_solicitado || 0,
+    );
+
+    const creditoDisponible = Number(cliente.poder_credito || 0);
+
+    /* =================================================
+         OPCIÓN SIN ENGANCHE TAMPOCO PUEDE SUPERAR CRÉDITO
+      ================================================= */
+
+    if (montoOriginal > creditoDisponible + 0.009) {
+      await transaction.rollback();
+
+      return res.status(409).json({
+        success: false,
+
+        codigo: "MONTO_SUPERA_CREDITO_ASIGNADO",
+
+        message:
+          `No puedes financiar esta compra porque supera tu crédito disponible de ` +
+          `RD$ ${creditoDisponible.toFixed(2)}.`,
+
+        monto_original: montoOriginal,
+
+        credito_disponible: creditoDisponible,
+      });
+    }
+
+    const puntajeCrediticio = Number(
+      evaluacion.puntaje_crediticio_resultante ??
+        evaluacion.puntaje_crediticio ??
+        0,
+    );
+
+    const puntajeFraude = Number(evaluacion.puntaje_fraude || 0);
+
+    const porcentajeActual = Number(evaluacion.porcentaje_enganche || 0);
+
+    const cuotasActuales = Number(evaluacion.numero_cuotas_permitidas || 4);
+
+    /* ==============================
+         FRAUDE
+      ============================== */
+
+    if (puntajeFraude >= 60) {
+      await transaction.rollback();
+
+      return res.status(403).json({
+        success: false,
+
+        codigo: "SIN_ENGANCHE_NO_DISPONIBLE",
+
+        message:
+          "Por seguridad, esta operación no puede realizarse sin enganche.",
+      });
+    }
+
+    /* ==============================
+         RIESGO CRÍTICO
+      ============================== */
+
+    if (puntajeCrediticio < 30) {
+      await transaction.rollback();
+
+      return res.status(403).json({
+        success: false,
+
+        codigo: "SIN_ENGANCHE_NO_DISPONIBLE",
+
+        message: "Tu nivel de riesgo actual no permite eliminar el enganche.",
+      });
+    }
+
+    /* =================================================
+         FINANCIAR 100 % SIN ENGANCHE
+      ================================================= */
+
+    if (puntajeCrediticio >= 55) {
+      let nuevasCuotas = cuotasActuales;
+
+      /*
+       * Riesgo medio:
+       * si pide 12 o 24 cuotas,
+       * intentamos limitarlo a 4.
+       */
+      if (puntajeCrediticio < 65) {
+        nuevasCuotas = Math.min(nuevasCuotas, 4);
+      }
+
+      await evaluacion.update(
+        {
+          decision:
+            nuevasCuotas < cuotasActuales
+              ? DECISIONES.CUOTAS_REDUCIDAS
+              : DECISIONES.APROBACION_NORMAL,
+
+          monto_financiable: montoOriginal,
+
+          porcentaje_enganche: 0,
+
+          numero_cuotas_permitidas: nuevasCuotas,
+
+          motivo_principal: "Alternativa sin enganche aprobada.",
+
+          explicacion:
+            nuevasCuotas < cuotasActuales
+              ? "El monto completo puede financiarse sin enganche, pero con menos cuotas."
+              : "El monto completo puede financiarse sin enganche utilizando el crédito disponible.",
+        },
+        {
+          transaction,
+        },
+      );
+
+      await transaction.commit();
+
+      return res.status(200).json({
+        success: true,
+
+        codigo: "ALTERNATIVA_SIN_ENGANCHE_APROBADA",
+
+        message:
+          nuevasCuotas < cuotasActuales
+            ? "Puedes financiar el 100 % sin enganche, pero con menos cuotas."
+            : "Puedes financiar el 100 % de la compra sin enganche.",
+
+        evaluacion_id: evaluacion.id,
+
+        propuesta: {
+          decision:
+            nuevasCuotas < cuotasActuales
+              ? DECISIONES.CUOTAS_REDUCIDAS
+              : DECISIONES.APROBACION_NORMAL,
+
+          monto_original: montoOriginal,
+
+          monto_financiable: montoOriginal,
+
+          porcentaje_enganche: 0,
+
+          numero_cuotas_solicitadas: cuotasActuales,
+
+          numero_cuotas_permitidas: nuevasCuotas,
+
+          motivo: "Alternativa sin enganche aprobada.",
+
+          explicacion:
+            nuevasCuotas < cuotasActuales
+              ? "El financiamiento completo fue autorizado sin enganche reduciendo las cuotas."
+              : "El financiamiento completo fue autorizado sin pago inicial.",
+        },
+      });
+    }
+
+    /* =================================================
+         RIESGO 30-54:
+         NO ELIMINAMOS AUTOMÁTICAMENTE EL ENGANCHE
+      ================================================= */
+
+    await transaction.rollback();
+
+    return res.status(403).json({
+      success: false,
+
+      codigo: "ALTERNATIVA_SIN_ENGANCHE_NO_DISPONIBLE",
+
+      message:
+        porcentajeActual > 0
+          ? "Según tu perfil actual, el enganche es necesario para aprobar esta operación."
+          : "No existe una alternativa sin enganche para esta compra.",
+    });
+  } catch (error) {
+    console.error("Error requestNoDownPayment:", error);
+
+    if (!transaction.finished) {
+      await transaction.rollback();
+    }
+
+    return res.status(error.status || 500).json({
+      success: false,
+
+      codigo: error.codigo || "ERROR_ALTERNATIVA_SIN_ENGANCHE",
+
+      message:
+        error.message || "No se pudo evaluar la alternativa sin enganche.",
+    });
+  }
+};
+
+/* =====================================================
+   PAGAR CUOTA
+===================================================== */
+
+export const payInstallment = async (req, res) => {
+  const t = await db.sequelize.transaction();
+
+  try {
+    const { cuota_id, metodo_pago_id } = req.body;
+
+    const userId = req.user.id;
+
+    if (!metodo_pago_id) {
+      await t.rollback();
+
+      return res.status(400).json({
+        message: "Debes seleccionar un método de pago.",
+      });
+    }
+
+    const metodo = await MetodoPago.findOne({
+      where: {
+        id: metodo_pago_id,
+
+        cliente_id: userId,
+      },
+
       transaction: t,
     });
 
     if (!metodo) {
       await t.rollback();
-      return res
-        .status(400)
-        .json({ message: "El método de pago no es válido o no te pertenece." });
-    }
-    // ------------------------------------------------
 
-    // 2. Buscar la cuota y validar propiedad
+      return res.status(400).json({
+        message: "El método de pago no es válido o no te pertenece.",
+      });
+    }
+
     const cuota = await Cuota.findByPk(cuota_id, {
       include: [
         {
           model: PagoBNPL,
+
           as: "pago_bnpl",
+
           include: [
             {
               model: Orden,
+
               as: "orden",
+
               include: [
-                { model: Cliente, as: "cliente" },
-                { model: Tienda, as: "tienda" },
+                {
+                  model: Cliente,
+
+                  as: "cliente",
+                },
+                {
+                  model: Tienda,
+
+                  as: "tienda",
+                },
               ],
             },
           ],
         },
       ],
+
       transaction: t,
     });
 
     if (!cuota) {
       await t.rollback();
-      return res.status(404).json({ message: "Cuota no encontrada" });
+
+      return res.status(404).json({
+        message: "Cuota no encontrada.",
+      });
     }
 
     if (cuota.pago_bnpl.orden.cliente.id !== userId) {
       await t.rollback();
-      return res
-        .status(403)
-        .json({ message: "No tienes permiso para pagar esta cuota." });
+
+      return res.status(403).json({
+        message: "No tienes permiso para pagar esta cuota.",
+      });
     }
 
     if (cuota.estado === "pagado") {
       await t.rollback();
-      return res.status(400).json({ message: "Esta cuota ya está pagada." });
+
+      return res.status(400).json({
+        message: "Esta cuota ya está pagada.",
+      });
     }
 
-    // 3. Procesar Pago
     cuota.estado = "pagado";
+
     cuota.fecha_pago = new Date();
-    await cuota.save({ transaction: t });
+
+    await cuota.save({
+      transaction: t,
+    });
 
     const pagoPadre = cuota.pago_bnpl;
+
     const montoPagado = Number(cuota.monto);
 
-    // Restamos la deuda
     pagoPadre.monto_pendiente = Math.max(
       Number((Number(pagoPadre.monto_pendiente) - montoPagado).toFixed(2)),
       0,
     );
 
     const cliente = cuota.pago_bnpl.orden.cliente;
+
     const nombreTienda = cuota.pago_bnpl.orden.tienda.nombre;
+
     let mensajeExtra = "";
 
-    // 4. VERIFICAR CIERRE DE ORDEN
     if (Number(pagoPadre.monto_pendiente) <= 0.05) {
-      pagoPadre.monto_pendiente = 0.0;
+      pagoPadre.monto_pendiente = 0;
+
       pagoPadre.estado = "pagado";
 
       const orden = pagoPadre.orden;
+
       orden.estado = "completada";
 
-      await orden.save({ transaction: t });
+      await orden.save({
+        transaction: t,
+      });
 
-      // Obtener todas las cuotas del financiamiento
       const historialCuotas = await Cuota.findAll({
         where: {
           pago_bnpl_id: pagoPadre.id,
         },
+
         order: [["numero_cuota", "ASC"]],
+
         transaction: t,
       });
 
       const cuotasTotales = historialCuotas.length;
 
-      let cuotasPagadasATiempo = 0;
-      let cuotasPagadasTarde = 0;
+      let cuotasATiempo = 0;
 
-      historialCuotas.forEach((cuotaHistorial) => {
-        if (!cuotaHistorial.fecha_pago) {
+      let cuotasTarde = 0;
+
+      historialCuotas.forEach((item) => {
+        if (!item.fecha_pago) {
           return;
         }
 
-        const fechaPago = new Date(cuotaHistorial.fecha_pago);
-        const fechaVencimiento = new Date(cuotaHistorial.fecha_vencimiento);
+        const fechaPago = new Date(item.fecha_pago);
 
-        // Comparamos solamente la fecha, no la hora
+        const fechaVencimiento = new Date(item.fecha_vencimiento);
+
         fechaPago.setHours(0, 0, 0, 0);
+
         fechaVencimiento.setHours(0, 0, 0, 0);
 
         if (fechaPago <= fechaVencimiento) {
-          cuotasPagadasATiempo++;
+          cuotasATiempo += 1;
         } else {
-          cuotasPagadasTarde++;
+          cuotasTarde += 1;
         }
       });
 
       const porcentajePuntualidad =
         cuotasTotales > 0
-          ? Number(((cuotasPagadasATiempo / cuotasTotales) * 100).toFixed(2))
+          ? Number(((cuotasATiempo / cuotasTotales) * 100).toFixed(2))
           : 0;
 
-      // Primera regla de elegibilidad:
-      // todas las cuotas deben haberse pagado a tiempo
       const esElegible =
         cuotasTotales > 0 &&
-        cuotasPagadasATiempo === cuotasTotales &&
-        cuotasPagadasTarde === 0;
+        cuotasATiempo === cuotasTotales &&
+        cuotasTarde === 0;
 
-      const observaciones = esElegible
-        ? "Financiamiento completado con todas las cuotas pagadas a tiempo."
-        : `Financiamiento completado con ${cuotasPagadasTarde} cuota(s) pagada(s) fuera de fecha.`;
-
-      // findOrCreate evita duplicar la evaluación del mismo financiamiento
       await EvaluacionCrediticia.findOrCreate({
         where: {
           pago_bnpl_id: pagoPadre.id,
         },
+
         defaults: {
           cliente_id: cliente.id,
+
           pago_bnpl_id: pagoPadre.id,
+
           cuotas_totales: cuotasTotales,
-          cuotas_pagadas_a_tiempo: cuotasPagadasATiempo,
-          cuotas_pagadas_tarde: cuotasPagadasTarde,
+
+          cuotas_pagadas_a_tiempo: cuotasATiempo,
+
+          cuotas_pagadas_tarde: cuotasTarde,
+
           porcentaje_puntualidad: porcentajePuntualidad,
+
           es_elegible: esElegible,
-          observaciones,
+
+          observaciones: esElegible
+            ? "Financiamiento completado con todas las cuotas pagadas a tiempo."
+            : `Financiamiento completado con ${cuotasTarde} cuota(s) pagadas tarde.`,
+
           fecha_evaluacion: new Date(),
         },
+
         transaction: t,
       });
 
-      if (esElegible) {
-        mensajeExtra =
-          " Completaste este financiamiento sin atrasos. Tu comportamiento crediticio fue evaluado favorablemente.";
-      } else {
-        mensajeExtra = ` Completaste el financiamiento con una puntualidad de ${porcentajePuntualidad}%.`;
-      }
+      mensajeExtra = esElegible
+        ? " Completaste este financiamiento sin atrasos."
+        : ` Completaste el financiamiento con ${porcentajePuntualidad}% de puntualidad.`;
     }
 
-    await pagoPadre.save({ transaction: t });
+    await pagoPadre.save({
+      transaction: t,
+    });
 
-    // 5. DEVOLUCIÓN DE CRÉDITO (Lo que pagó se libera)
-    cliente.poder_credito = Number(cliente.poder_credito) + montoPagado;
-    await cliente.save({ transaction: t });
+    cliente.poder_credito = Number(
+      (Number(cliente.poder_credito) + montoPagado).toFixed(2),
+    );
+
+    await cliente.save({
+      transaction: t,
+    });
 
     await recalcularPerfilRiesgoCliente(cliente.id, {
       transaction: t,
     });
 
-    // 6. Notificación (Incluyendo info del método usado)
     await Notificacion.create(
       {
         rol_destino: "cliente",
+
         usuario_id: cliente.id,
+
         tipo: "pago",
+
         titulo:
           pagoPadre.estado === "pagado"
             ? "Financiamiento completado"
-            : "Pago Exitoso",
-        mensaje: `Pagaste RD$ ${montoPagado.toFixed(
-          2,
-        )} a ${nombreTienda} usando ${metodo.marca} •••• ${
-          metodo.ultimos_cuatro_digitos
-        }. Crédito recuperado.${mensajeExtra}`,
+            : "Pago exitoso",
+
+        mensaje:
+          `Pagaste RD$ ${montoPagado.toFixed(2)} a ${nombreTienda} usando ` +
+          `${metodo.marca || metodo.tipo} •••• ` +
+          `${metodo.ultimos_cuatro_digitos || ""}. ` +
+          `Crédito recuperado.${mensajeExtra}`,
+
         url: "/cartera",
+
         is_new: true,
-        meta: JSON.stringify({ orden_id: pagoPadre.orden_id }),
+
+        meta: JSON.stringify({
+          orden_id: pagoPadre.orden_id,
+        }),
       },
-      { transaction: t },
+      {
+        transaction: t,
+      },
     );
 
     await t.commit();
 
-    res.json({
+    return res.json({
       success: true,
-      message: "Pago realizado correctamente",
+
+      message: "Pago realizado correctamente.",
+
       nuevo_credito: cliente.poder_credito,
     });
-  } catch (err) {
-    console.error("Error payInstallment:", err);
+  } catch (error) {
+    console.error("Error payInstallment:", error);
+
     if (!t.finished) {
       await t.rollback();
     }
+
     return res.status(500).json({
-      message: err.message || "Error procesando el pago",
+      success: false,
+
+      message: error.message || "Error procesando el pago.",
     });
   }
 };

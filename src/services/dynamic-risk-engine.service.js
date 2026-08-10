@@ -17,7 +17,7 @@ const {
    CONFIGURACIÓN GENERAL DEL MOTOR
 ===================================================== */
 
-const VERSION_MOTOR = "1.0.0";
+const VERSION_MOTOR = "1.1.0";
 
 const DECISIONES = {
   APROBACION_NORMAL: "aprobacion_normal",
@@ -149,6 +149,7 @@ const analizarSenalesCrediticias = ({
   perfil,
   montoSolicitado,
   numeroCuotasSolicitadas,
+  creditoDisponible = 0,
 }) => {
   const senales = [];
 
@@ -167,6 +168,18 @@ const analizarSenalesCrediticias = ({
   const financiamientosActivos = Number(perfil.financiamientos_activos) || 0;
 
   const cuotasTardias = Number(perfil.cuotas_pagadas_tarde) || 0;
+
+  const cuotasPuntuales = Number(perfil.cuotas_pagadas_a_tiempo) || 0;
+
+  const financiamientosCompletados =
+    Number(perfil.financiamientos_completados) || 0;
+
+  const totalCuotasPagadas = cuotasPuntuales + cuotasTardias;
+
+  const clienteSinHistorial =
+    financiamientosCompletados === 0 && totalCuotasPagadas === 0;
+
+  const creditoAsignado = Number(creditoDisponible) || 0;
 
   const relacionDeudaIngreso =
     perfil.relacion_deuda_ingreso !== null
@@ -340,29 +353,61 @@ const analizarSenalesCrediticias = ({
       );
     }
   } else {
-    ajusteCredito -= 5;
+    /*
+     * Un cliente nuevo con crédito ya asignado
+     * no debe ser penalizado automáticamente
+     * solamente por no tener historial interno.
+     */
+    if (clienteSinHistorial && creditoAsignado > 0) {
+      senales.push(
+        crearSenal({
+          categoria: "ingresos",
 
-    senales.push(
-      crearSenal({
-        categoria: "ingresos",
+          codigo: "CLIENTE_NUEVO_CON_CREDITO_ASIGNADO",
 
-        codigo: "INGRESOS_NO_DECLARADOS",
+          nombre: "Cliente nuevo con crédito previamente asignado",
 
-        nombre: "Ingresos no disponibles",
+          valorNumerico: creditoAsignado,
 
-        valorBooleano: true,
+          valorBooleano: true,
 
-        peso: 0.5,
+          peso: 0,
 
-        impacto: -5,
+          impacto: 0,
 
-        severidad: "media",
+          severidad: "informativa",
 
-        activada: true,
+          activada: true,
 
-        descripcion: "No se encontraron ingresos declarados o verificados.",
-      }),
-    );
+          descripcion:
+            "El cliente aún no posee historial interno, pero ya cuenta con crédito asignado. La ausencia de historial no genera una penalización automática.",
+        }),
+      );
+    } else {
+      ajusteCredito -= 5;
+
+      senales.push(
+        crearSenal({
+          categoria: "ingresos",
+
+          codigo: "INGRESOS_NO_DECLARADOS",
+
+          nombre: "Ingresos no disponibles",
+
+          valorBooleano: true,
+
+          peso: 0.5,
+
+          impacto: -5,
+
+          severidad: "media",
+
+          activada: true,
+
+          descripcion: "No se encontraron ingresos declarados o verificados.",
+        }),
+      );
+    }
   }
 
   /*
@@ -987,6 +1032,215 @@ const analizarSenalesFraude = ({ perfil, contexto, montoSolicitado }) => {
 };
 
 /* =====================================================
+   CALCULAR ENGANCHE DINÁMICO
+===================================================== */
+
+const calcularEngancheDinamico = ({
+  perfil,
+  puntajeCrediticio,
+  puntajeFraude,
+  montoSolicitado,
+  creditoDisponible,
+}) => {
+  const puntaje = Number(puntajeCrediticio) || 0;
+
+  const fraude = Number(puntajeFraude) || 0;
+
+  const monto = Number(montoSolicitado) || 0;
+
+  const credito = Number(creditoDisponible) || 0;
+
+  const completados = Number(perfil.financiamientos_completados) || 0;
+
+  const cuotasPuntuales = Number(perfil.cuotas_pagadas_a_tiempo) || 0;
+
+  const cuotasTardias = Number(perfil.cuotas_pagadas_tarde) || 0;
+
+  const totalCuotasPagadas = cuotasPuntuales + cuotasTardias;
+
+  const puntualidad = Number(perfil.porcentaje_puntualidad) || 0;
+
+  const deuda = Number(perfil.deuda_activa) || 0;
+
+  const activos = Number(perfil.financiamientos_activos) || 0;
+
+  const alertas = Number(perfil.alertas_activas) || 0;
+
+  const clienteNuevo = completados === 0 && totalCuotasPagadas === 0;
+
+  /*
+   * Ejemplo:
+   *
+   * Crédito: 20,000
+   * Compra: 5,000
+   * usoCredito = 0.25 = 25 %
+   */
+  const usoCredito = credito > 0 ? monto / credito : 2;
+
+  /*
+   * Riesgo crítico.
+   *
+   * El enganche NO debe utilizarse
+   * para convertir una operación
+   * crítica en aprobada.
+   */
+  if (puntaje < 30 || fraude >= 80) {
+    return 100;
+  }
+
+  /* ==========================================
+     CLIENTE NUEVO
+
+     Bajo + compra pequeña = 0-10 %
+     Medio = 15-25 %
+     Monto elevado = 20-30 %
+  ========================================== */
+
+  if (clienteNuevo) {
+    const perfilNuevoSano =
+      puntaje >= 50 &&
+      fraude < 20 &&
+      deuda <= 0 &&
+      alertas === 0 &&
+      activos <= 1;
+
+    /*
+     * Compra hasta 35 % del crédito.
+     */
+    if (perfilNuevoSano && usoCredito <= 0.35) {
+      return 0;
+    }
+
+    /*
+     * Compra entre 35 % y 50 %.
+     */
+    if (perfilNuevoSano && usoCredito <= 0.5) {
+      return 5;
+    }
+
+    /*
+     * Compra entre 50 % y 65 %.
+     */
+    if (perfilNuevoSano && usoCredito <= 0.65) {
+      return 10;
+    }
+
+    /*
+     * Riesgo medio.
+     */
+    if (puntaje >= 50 && fraude < 40) {
+      if (usoCredito <= 0.5) {
+        return 15;
+      }
+
+      if (usoCredito <= 0.75) {
+        return 20;
+      }
+
+      if (usoCredito <= 0.9) {
+        return 25;
+      }
+
+      return 30;
+    }
+
+    /*
+     * Cliente nuevo con riesgo más alto,
+     * pero todavía no crítico.
+     */
+    if (usoCredito <= 0.6) {
+      return 20;
+    }
+
+    if (usoCredito <= 0.85) {
+      return 25;
+    }
+
+    return 30;
+  }
+
+  /* ==========================================
+     CLIENTE RECURRENTE
+  ========================================== */
+
+  /*
+   * Historial excelente.
+   */
+  const historialExcelente =
+    completados >= 2 &&
+    puntualidad >= 95 &&
+    cuotasTardias === 0 &&
+    puntaje >= 70 &&
+    fraude < 20 &&
+    alertas === 0;
+
+  if (historialExcelente) {
+    /*
+     * Solo una compra extremadamente cercana
+     * al crédito disponible recibe 5 %.
+     */
+    return usoCredito > 0.85 ? 5 : 0;
+  }
+
+  /*
+   * Recurrente con riesgo alto.
+   *
+   * 30-40 %
+   */
+  if (puntaje < 50) {
+    let enganche = 30;
+
+    if (usoCredito > 0.75 || cuotasTardias >= 2) {
+      enganche += 5;
+    }
+
+    if (usoCredito > 0.9 || cuotasTardias >= 4) {
+      enganche += 5;
+    }
+
+    return Math.min(enganche, 40);
+  }
+
+  /*
+   * Recurrente con algunos atrasos.
+   *
+   * 10-25 %
+   */
+  if (cuotasTardias > 0) {
+    let enganche = 10;
+
+    enganche += Math.min(cuotasTardias * 5, 10);
+
+    if (usoCredito > 0.75) {
+      enganche += 5;
+    }
+
+    return Math.min(enganche, 25);
+  }
+
+  /*
+   * Recurrente sin atrasos pero
+   * todavía con riesgo medio.
+   */
+  if (puntaje < 70) {
+    if (usoCredito <= 0.5) {
+      return 10;
+    }
+
+    if (usoCredito <= 0.8) {
+      return 15;
+    }
+
+    return 20;
+  }
+
+  /*
+   * Buen historial general.
+   */
+  return usoCredito > 0.85 ? 10 : 0;
+};
+
+/* =====================================================
    GENERAR CONDICIONES Y DECISIÓN
 ===================================================== */
 
@@ -997,11 +1251,24 @@ const generarDecision = ({
   montoSolicitado,
   numeroCuotasSolicitadas,
   limiteRecomendado,
+  creditoDisponible,
 }) => {
   const maximoCuotas = Number(perfil.maximo_cuotas_recomendadas) || 4;
 
   const engancheRecomendado =
     Number(perfil.porcentaje_enganche_recomendado) || 0;
+
+  const engancheDinamico = calcularEngancheDinamico({
+    perfil,
+
+    puntajeCrediticio,
+
+    puntajeFraude,
+
+    montoSolicitado,
+
+    creditoDisponible,
+  });
 
   const montoBaseFinanciable =
     limiteRecomendado > 0 ? Math.min(montoSolicitado, limiteRecomendado) : 0;
@@ -1101,8 +1368,7 @@ const generarDecision = ({
       motivoPrincipal:
         "La capacidad de pago actual no permite aprobar el financiamiento.",
 
-      explicacion:
-      `El puntaje crediticio resultante fue ${puntajeCrediticio}, por debajo del minimo permitido de 30 puntos`,
+      explicacion: `El puntaje crediticio resultante fue ${puntajeCrediticio}, por debajo del minimo permitido de 30 puntos`,
     };
   }
 
@@ -1117,7 +1383,7 @@ const generarDecision = ({
 
       montoFinanciable: redondear(Math.max(montoReducido, 0)),
 
-      porcentajeEnganche: Math.max(engancheRecomendado, 40),
+      porcentajeEnganche: Math.max(engancheDinamico, 30),
 
       numeroCuotasPermitidas: Math.min(numeroCuotasSolicitadas, 4),
 
@@ -1142,7 +1408,7 @@ const generarDecision = ({
 
       montoFinanciable: redondear(limiteRecomendado),
 
-      porcentajeEnganche: Math.max(engancheRecomendado, 20),
+      porcentajeEnganche: engancheDinamico,
 
       numeroCuotasPermitidas: Math.min(numeroCuotasSolicitadas, maximoCuotas),
 
@@ -1166,7 +1432,7 @@ const generarDecision = ({
 
       montoFinanciable: redondear(montoSolicitado),
 
-      porcentajeEnganche: engancheRecomendado,
+      porcentajeEnganche: engancheDinamico,
 
       numeroCuotasPermitidas: maximoCuotas,
 
@@ -1182,26 +1448,88 @@ const generarDecision = ({
   }
 
   /*
-   * 8. Riesgo medio: aprobación con enganche.
+   * 8. Riesgo medio.
+   *
+   * Si el cálculo dinámico determina 0 %,
+   * no existe realmente una condición de
+   * enganche y la compra puede aprobarse
+   * normalmente.
    */
   if (puntajeCrediticio < 70) {
+    const cuotasPermitidas = Math.min(numeroCuotasSolicitadas, maximoCuotas);
+
+    /*
+     * Si no hay enganche y tampoco se
+     * modificaron las cuotas, no hay ninguna
+     * condición nueva que el cliente tenga
+     * que aceptar.
+     */
+    if (engancheDinamico <= 0 && cuotasPermitidas === numeroCuotasSolicitadas) {
+      return {
+        decision: DECISIONES.APROBACION_NORMAL,
+
+        montoFinanciable: redondear(montoSolicitado),
+
+        porcentajeEnganche: 0,
+
+        numeroCuotasPermitidas: cuotasPermitidas,
+
+        requiereRevisionManual: false,
+
+        bloqueoPreventivo: false,
+
+        motivoPrincipal: "La compra fue aprobada sin enganche.",
+
+        explicacion:
+          "El nivel de riesgo actual permite financiar el monto completo utilizando el crédito disponible del cliente.",
+      };
+    }
+
+    /*
+     * Hay enganche real.
+     */
+    if (engancheDinamico > 0) {
+      return {
+        decision: DECISIONES.APROBACION_ENGANCHE_MAYOR,
+
+        montoFinanciable: redondear(montoSolicitado),
+
+        porcentajeEnganche: engancheDinamico,
+
+        numeroCuotasPermitidas: cuotasPermitidas,
+
+        requiereRevisionManual: false,
+
+        bloqueoPreventivo: false,
+
+        motivoPrincipal: "La compra fue aprobada con un enganche.",
+
+        explicacion: `Según el perfil de riesgo actual, la compra requiere un enganche de ${engancheDinamico}% antes de crear el financiamiento.`,
+      };
+    }
+
+    /*
+     * No hay enganche, pero las cuotas
+     * fueron modificadas.
+     */
     return {
-      decision: DECISIONES.APROBACION_ENGANCHE_MAYOR,
+      decision: DECISIONES.CUOTAS_REDUCIDAS,
 
       montoFinanciable: redondear(montoSolicitado),
 
-      porcentajeEnganche: Math.max(engancheRecomendado, 20),
+      porcentajeEnganche: 0,
 
-      numeroCuotasPermitidas: Math.min(numeroCuotasSolicitadas, maximoCuotas),
+      numeroCuotasPermitidas: cuotasPermitidas,
 
       requiereRevisionManual: false,
 
       bloqueoPreventivo: false,
 
-      motivoPrincipal: "La compra fue aprobada con un enganche mayor.",
+      motivoPrincipal:
+        "La compra puede financiarse sin enganche, pero con un número de cuotas ajustado.",
 
       explicacion:
-        "El cliente tiene una capacidad aceptable, pero el riesgo requiere una participación inicial mayor.",
+        "El monto completo puede financiarse utilizando el crédito disponible, pero el número de cuotas fue reducido para mantener un nivel de riesgo aceptable.",
     };
   }
 
@@ -1213,7 +1541,7 @@ const generarDecision = ({
 
     montoFinanciable: redondear(montoSolicitado),
 
-    porcentajeEnganche: engancheRecomendado,
+    porcentajeEnganche: engancheDinamico,
 
     numeroCuotasPermitidas: Math.min(numeroCuotasSolicitadas, maximoCuotas),
 
@@ -1400,6 +1728,8 @@ export const evaluarCompraDinamicamente = async ({
       montoSolicitado: monto,
 
       numeroCuotasSolicitadas: cuotasSolicitadas,
+
+      creditoDisponible: Number(cliente.poder_credito || 0),
     });
 
     const analisisFraude = analizarSenalesFraude({
@@ -1434,6 +1764,8 @@ export const evaluarCompraDinamicamente = async ({
       numeroCuotasSolicitadas: cuotasSolicitadas,
 
       limiteRecomendado: analisisCredito.limiteRecomendado,
+
+      creditoDisponible: Number(cliente.poder_credito || 0),
     });
 
     const ipHash =
@@ -1584,9 +1916,9 @@ export const evaluarCompraDinamicamente = async ({
      */
     await perfil.update(
       {
-        puntaje_crediticio: perfil.puntuaje_crediticio || 50,
+        puntaje_crediticio: perfil.puntaje_crediticio || 50,
 
-        puntaje_fraude: Number(perfil.puntuaje_fraude || 0),
+        puntaje_fraude: Number(perfil.puntaje_fraude || 0),
 
         nivel_riesgo: nivelRiesgo,
 
@@ -1596,7 +1928,7 @@ export const evaluarCompraDinamicamente = async ({
 
         bloqueado_preventivamente: Boolean(perfil.bloqueado_preventivamente),
 
-        motivo_bloqueo: perfil.motivo_bloqueo 
+        motivo_bloqueo: perfil.motivo_bloqueo
           ? resultadoDecision.motivoPrincipal
           : null,
 

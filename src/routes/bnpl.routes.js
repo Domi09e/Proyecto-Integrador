@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
   bnplCheckout,
   acceptRiskProposal,
+  requestNoDownPayment,
   payInstallment,
 } from "../controllers/bnpl.controller.js";
 import { requireAuth } from "../middlewares/auth.middleware.js";
@@ -23,6 +24,7 @@ router.post("/bnpl/pay", requireAuth, payInstallment);
 router.post("/bnpl/split-order", requireAuth, splitExistingOrder);
 router.post("/bnpl/split-order/add", requireAuth, addParticipantToGroup);
 router.post("/bnpl/accept-risk-proposal", requireAuth, acceptRiskProposal);
+router.post("/bnpl/request-no-down-payment", requireAuth, requestNoDownPayment);
 
 // 3. Obtener Cuotas Pendientes (GET simple para la pantalla de Pagos)
 router.get("/bnpl/pending-installments", requireAuth, async (req, res) => {

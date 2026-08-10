@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+
 import {
   X,
   ShoppingBag,
@@ -7,25 +8,28 @@ import {
   Wallet,
   ShieldCheck,
   CreditCard,
+  RefreshCw,
 } from "lucide-react";
+
 import { useNavigate } from "react-router-dom";
+
 import api from "../api/axios";
 
 /* =============================================
-   ETIQUETAS DE LOS PLANES
+   PLANES
 ============================================= */
 
 const PREFS_LABELS = {
   pago_completo: "1 Pago (Contado)",
+
   pagar_despues: "Pagar en 30 días (1 Cuota)",
+
   "4_quincenas": "4 Cuotas Quincenales (0% interés)",
+
   "12_meses": "12 Cuotas Mensuales",
+
   "24_meses": "24 Cuotas Mensuales",
 };
-
-/* =============================================
-   CANTIDAD DE CUOTAS POR PLAN
-============================================= */
 
 const PREFS_DIVISOR = {
   pago_completo: 1,
@@ -36,7 +40,7 @@ const PREFS_DIVISOR = {
 };
 
 /* =============================================
-   GENERAR ID ÚNICO PARA EL CHECKOUT
+   SESSION ID
 ============================================= */
 
 const generarSessionId = () => {
@@ -63,6 +67,8 @@ export default function CheckoutModal({ tienda, onClose, initialAmount }) {
 
   const [processing, setProcessing] = useState(false);
 
+  const [procesandoSinEnganche, setProcesandoSinEnganche] = useState(false);
+
   const [error, setError] = useState("");
 
   const [mensaje, setMensaje] = useState("");
@@ -73,70 +79,52 @@ export default function CheckoutModal({ tienda, onClose, initialAmount }) {
 
   const [causasRechazo, setCausasRechazo] = useState([]);
 
-  const [mostrarDetallesRechazo, setMostrarDetallesRechazo] = useState(false);
-
   const [accionesRecomendadas, setAccionesRecomendadas] = useState([]);
 
   const [metodosPago, setMetodosPago] = useState([]);
 
   const [metodoPagoSeleccionado, setMetodoPagoSeleccionado] = useState("");
 
-  /*
-   * Se genera una sola vez cuando se abre
-   * el modal.
-   */
   const [checkoutSessionId] = useState(generarSessionId);
 
   /* =============================================
-     CARGAR PERFIL Y MÉTODOS DE PAGO
+     CARGAR INFORMACIÓN
   ============================================= */
 
   useEffect(() => {
-    const fetchData = async () => {
+    const cargar = async () => {
       try {
         setLoading(true);
+
         setError("");
 
-        const [profileResponse, paymentMethodsResponse] = await Promise.all([
+        const [perfilResponse, metodosResponse] = await Promise.all([
           api.get("/client/profile"),
 
-          /*
-           * Esta debe ser la ruta que devuelve
-           * los métodos de pago del cliente.
-           */
           api.get("/client/payment-methods"),
         ]);
 
-        setUserProfile(profileResponse.data);
+        setUserProfile(perfilResponse.data);
 
-        const datosMetodos = paymentMethodsResponse.data;
+        const data = metodosResponse.data;
 
-        /*
-         * Admite diferentes formas de respuesta:
-         *
-         * [ ... ]
-         * { methods: [ ... ] }
-         * { metodos: [ ... ] }
-         * { data: [ ... ] }
-         */
-        const methods = Array.isArray(datosMetodos)
-          ? datosMetodos
-          : Array.isArray(datosMetodos?.methods)
-            ? datosMetodos.methods
-            : Array.isArray(datosMetodos?.metodos)
-              ? datosMetodos.metodos
-              : Array.isArray(datosMetodos?.data)
-                ? datosMetodos.data
+        const methods = Array.isArray(data)
+          ? data
+          : Array.isArray(data?.methods)
+            ? data.methods
+            : Array.isArray(data?.metodos)
+              ? data.metodos
+              : Array.isArray(data?.data)
+                ? data.data
                 : [];
 
         setMetodosPago(methods);
 
-        const metodoPredeterminado =
-          methods.find((metodo) => Boolean(metodo.es_predeterminado)) ||
-          methods[0];
+        const predeterminado =
+          methods.find((item) => Boolean(item.es_predeterminado)) || methods[0];
 
         setMetodoPagoSeleccionado(
-          metodoPredeterminado ? String(metodoPredeterminado.id) : "",
+          predeterminado ? String(predeterminado.id) : "",
         );
       } catch (err) {
         console.error("Error cargando checkout:", err);
@@ -150,18 +138,18 @@ export default function CheckoutModal({ tienda, onClose, initialAmount }) {
       }
     };
 
-    fetchData();
+    cargar();
   }, []);
 
   /* =============================================
-     CÁLCULOS DEL PLAN ACTUAL
+     VALORES
   ============================================= */
 
   const montoNum = Number.parseFloat(monto) || 0;
 
   const creditoDisponible = Number(userProfile?.poder_credito || 0);
 
-  const excedeCredito = montoNum > creditoDisponible;
+  const excedeCredito = montoNum > creditoDisponible + 0.009;
 
   const montoInvalido = !Number.isFinite(montoNum) || montoNum <= 0;
 
@@ -173,41 +161,36 @@ export default function CheckoutModal({ tienda, onClose, initialAmount }) {
     montoNum > 0 ? Number((montoNum / numCuotas).toFixed(2)) : 0;
 
   /* =============================================
-     CÁLCULOS DE LA PROPUESTA
+     PROPUESTA
   ============================================= */
 
   const montoOriginalPropuesta = Number(
     propuestaRiesgo?.monto_original ?? montoNum,
   );
 
-  const montoMaximoMotor = Number(propuestaRiesgo?.monto_financiable ?? 0);
+  const montoFinanciableMotor = Number(
+    propuestaRiesgo?.monto_financiable ?? montoOriginalPropuesta,
+  );
 
   const porcentajeEnganche = Number(propuestaRiesgo?.porcentaje_enganche ?? 0);
 
   /*
-   * Monto permitido después de aplicar
-   * el porcentaje de enganche.
-   */
-  const financiablePorEnganche =
-    montoOriginalPropuesta * (1 - porcentajeEnganche / 100);
-
-  /*
-   * Se utiliza el menor monto entre:
+   * El enganche explícito se calcula
+   * SOLAMENTE por su porcentaje.
    *
-   * 1. El monto permitido por el motor.
-   * 2. El monto resultante del enganche.
+   * Una reducción del monto ya no se
+   * interpreta como enganche.
    */
-  const montoFinanciadoFinal = propuestaRiesgo
-    ? Number(Math.min(montoMaximoMotor, financiablePorEnganche).toFixed(2))
-    : 0;
+  const montoEnganche = Number(
+    (montoOriginalPropuesta * (porcentajeEnganche / 100)).toFixed(2),
+  );
 
-  /*
-   * Todo lo que no se financia
-   * debe pagarse inmediatamente.
-   */
-  const montoEnganche = propuestaRiesgo
-    ? Number((montoOriginalPropuesta - montoFinanciadoFinal).toFixed(2))
-    : 0;
+  const montoFinanciadoPorEnganche = Number(
+    (montoOriginalPropuesta - montoEnganche).toFixed(2),
+  );
+
+  const montoFinanciadoFinal =
+    porcentajeEnganche > 0 ? montoFinanciadoPorEnganche : montoFinanciableMotor;
 
   const numeroCuotasPropuesta = Number(
     propuestaRiesgo?.numero_cuotas_permitidas ??
@@ -220,32 +203,48 @@ export default function CheckoutModal({ tienda, onClose, initialAmount }) {
       ? Number((montoFinanciadoFinal / numeroCuotasPropuesta).toFixed(2))
       : 0;
 
-  const requiereEnganche = Boolean(propuestaRiesgo) && montoEnganche > 0;
+  const requiereEnganche =
+    Boolean(propuestaRiesgo) &&
+    porcentajeEnganche > 0.009 &&
+    montoEnganche > 0.009;
 
   const faltaMetodoPago = requiereEnganche && !metodoPagoSeleccionado;
 
+  const montoFueReducido =
+    Boolean(propuestaRiesgo) &&
+    montoFinanciableMotor < montoOriginalPropuesta - 0.009;
+
+  const cuotasFueronReducidas =
+    Boolean(propuestaRiesgo) &&
+    numeroCuotasPropuesta !==
+      Number(propuestaRiesgo?.numero_cuotas_solicitadas ?? numCuotas);
+
   /* =============================================
-     CAMBIAR MONTO
+     LIMPIAR EVALUACIÓN
   ============================================= */
+
+  const limpiarEvaluacion = () => {
+    setPropuestaRiesgo(null);
+
+    setEvaluacionId(null);
+
+    setError("");
+
+    setMensaje("");
+
+    setCausasRechazo([]);
+
+    setAccionesRecomendadas([]);
+  };
 
   const handleMontoChange = (event) => {
     setMonto(event.target.value);
 
-    /*
-     * Si cambia el monto, la evaluación
-     * anterior deja de ser válida.
-     */
-    setPropuestaRiesgo(null);
-    setEvaluacionId(null);
-    setError("");
-    setMensaje("");
-    setCausasRechazo([]);
-    setAccionesRecomendadas([]);
-    setMostrarDetallesRechazo(false);
+    limpiarEvaluacion();
   };
 
   /* =============================================
-     PROCESAR CHECKOUT INICIAL
+     CHECKOUT
   ============================================= */
 
   const handleCheckout = async (event) => {
@@ -261,9 +260,17 @@ export default function CheckoutModal({ tienda, onClose, initialAmount }) {
       return;
     }
 
+    /*
+     * REGLA FRONTEND:
+     * NO mandar al motor una compra
+     * superior al crédito.
+     */
     if (excedeCredito) {
       setError(
-        "No tienes suficiente crédito disponible para realizar esta compra.",
+        `El total de la compra supera tu crédito disponible. ` +
+          `Debes reducir la compra a RD$ ${creditoDisponible.toFixed(
+            2,
+          )} o menos.`,
       );
 
       return;
@@ -271,13 +278,8 @@ export default function CheckoutModal({ tienda, onClose, initialAmount }) {
 
     try {
       setProcessing(true);
-      setError("");
-      setMensaje("");
-      setCausasRechazo([]);
-      setAccionesRecomendadas([]);
-      setPropuestaRiesgo(null);
-      setEvaluacionId(null);
-      setMostrarDetallesRechazo(false);
+
+      limpiarEvaluacion();
 
       const payload = {
         tiendaId: tienda.id,
@@ -288,10 +290,6 @@ export default function CheckoutModal({ tienda, onClose, initialAmount }) {
 
         session_id: checkoutSessionId,
 
-        /*
-         * Señales neutrales hasta implementar
-         * su captura real.
-         */
         dispositivo_nuevo: false,
 
         ip_nueva: false,
@@ -311,51 +309,57 @@ export default function CheckoutModal({ tienda, onClose, initialAmount }) {
 
       const response = await api.post("/bnpl/checkout", payload);
 
-      alert(
-        response.data?.message ||
-          `¡Compra exitosa en ${tienda.nombre || tienda.name}!`,
-      );
+      alert(response.data?.message || "Compra realizada correctamente.");
 
       navigate("/cartera");
+
       onClose();
     } catch (err) {
-      console.error("Error procesando checkout:", err);
+      console.error("Error checkout:", err);
 
       const respuesta = err.response?.data || {};
 
       const codigo = respuesta.codigo;
 
-      /*
-       * Propuesta con condiciones ajustadas.
-       */
-      if (codigo === "CONDICIONES_AJUSTADAS_REQUIEREN_ACEPTACION") {
+      /* ===============================
+           MONTO > CRÉDITO
+        =============================== */
+
+      if (codigo === "MONTO_SUPERA_CREDITO_ASIGNADO") {
+        setError(
+          respuesta.message || "La compra supera tu crédito disponible.",
+        );
+
+        return;
+      }
+
+      /* ===============================
+           REDUCIR MONTO
+        =============================== */
+
+      if (codigo === "REDUCIR_MONTO_COMPRA") {
+        setError(respuesta.message || "Debes reducir el monto de la compra.");
+
+        return;
+      }
+
+      /* ===============================
+           PROPUESTA
+        =============================== */
+
+      if (
+        codigo === "CONDICIONES_AJUSTADAS_REQUIEREN_ACEPTACION" ||
+        codigo === "ENGANCHE_REQUIERE_ACEPTACION"
+      ) {
         setPropuestaRiesgo(respuesta.propuesta || null);
 
         setEvaluacionId(respuesta.evaluacion_id || null);
 
         setError("");
-        setMensaje("");
 
         return;
       }
 
-      /*
-       * Aprobación normal con enganche.
-       */
-      if (codigo === "ENGANCHE_REQUIERE_ACEPTACION") {
-        setPropuestaRiesgo(respuesta.propuesta || null);
-
-        setEvaluacionId(respuesta.evaluacion_id || null);
-
-        setError("");
-        setMensaje("");
-
-        return;
-      }
-
-      /*
-       * Número de cuotas ajustado.
-       */
       if (codigo === "CUOTAS_AJUSTADAS_REQUIEREN_ACEPTACION") {
         setPropuestaRiesgo({
           decision: "cuotas_reducidas",
@@ -364,7 +368,7 @@ export default function CheckoutModal({ tienda, onClose, initialAmount }) {
 
           monto_financiable: respuesta.propuesta?.monto_financiable ?? montoNum,
 
-          porcentaje_enganche: respuesta.propuesta?.porcentaje_enganche ?? 0,
+          porcentaje_enganche: 0,
 
           numero_cuotas_solicitadas:
             respuesta.propuesta?.numero_cuotas_solicitadas ?? numCuotas,
@@ -375,7 +379,7 @@ export default function CheckoutModal({ tienda, onClose, initialAmount }) {
           motivo: respuesta.message,
 
           explicacion:
-            "El motor ajustó el número de cuotas según el nivel de riesgo actual.",
+            "El motor ajustó el número de cuotas según tu perfil actual.",
         });
 
         setEvaluacionId(respuesta.evaluacion_id || null);
@@ -385,31 +389,43 @@ export default function CheckoutModal({ tienda, onClose, initialAmount }) {
         return;
       }
 
+      /* ===============================
+           DUPLICADA
+        =============================== */
+
       if (codigo === "SOLICITUD_DUPLICADA") {
         setError(
-          "Esta compra ya fue evaluada recientemente. No pulses el botón nuevamente.",
+          "Esta compra ya fue evaluada recientemente. No pulses el botón varias veces.",
         );
 
         return;
       }
+
+      /* ===============================
+           FRAUDE
+        =============================== */
 
       if (codigo === "OPERACION_BLOQUEADA_POR_RIESGO") {
-        setError(
-          respuesta.message ||
-            "La compra fue bloqueada por señales de seguridad.",
-        );
+        setError(respuesta.message || "La compra fue bloqueada por seguridad.");
 
         return;
       }
+
+      /* ===============================
+           VERIFICACIÓN
+        =============================== */
 
       if (codigo === "VERIFICACION_ADICIONAL_REQUERIDA") {
         setError(
-          respuesta.message ||
-            "Debes completar una verificación adicional para continuar.",
+          respuesta.message || "Debes completar una verificación adicional.",
         );
 
         return;
       }
+
+      /* ===============================
+           REVISIÓN
+        =============================== */
 
       if (codigo === "REVISION_MANUAL_REQUERIDA") {
         setMensaje(
@@ -418,6 +434,10 @@ export default function CheckoutModal({ tienda, onClose, initialAmount }) {
 
         return;
       }
+
+      /* ===============================
+           RECHAZO
+        =============================== */
 
       if (codigo === "FINANCIAMIENTO_RECHAZADO") {
         setError(respuesta.message || "El financiamiento no fue aprobado.");
@@ -432,31 +452,19 @@ export default function CheckoutModal({ tienda, onClose, initialAmount }) {
             : [],
         );
 
-        setPropuestaRiesgo(null);
-
         setEvaluacionId(respuesta.evaluacion_id || null);
 
-        setMostrarDetallesRechazo(false);
-
         return;
       }
 
-      if (codigo === "CREDITO_DISPONIBLE_INSUFICIENTE") {
-        setError(
-          respuesta.message || "No tienes suficiente crédito disponible.",
-        );
-
-        return;
-      }
-
-      setError(respuesta.message || "Ocurrió un error al procesar el pago.");
+      setError(respuesta.message || "Ocurrió un error al procesar la compra.");
     } finally {
       setProcessing(false);
     }
   };
 
   /* =============================================
-     PAGAR ENGANCHE Y ACEPTAR PROPUESTA
+     ACEPTAR PROPUESTA
   ============================================= */
 
   const handleAceptarPropuesta = async () => {
@@ -465,38 +473,65 @@ export default function CheckoutModal({ tienda, onClose, initialAmount }) {
     }
 
     if (!evaluacionId || !propuestaRiesgo) {
-      setError("No se encontró una propuesta válida para aceptar.");
+      setError("No se encontró una propuesta válida.");
+
+      return;
+    }
+
+    /*
+     * Protección adicional.
+     */
+    if (montoOriginalPropuesta > creditoDisponible + 0.009) {
+      setError(
+        `Esta compra supera tu crédito disponible de RD$ ${creditoDisponible.toFixed(
+          2,
+        )}.`,
+      );
+
+      return;
+    }
+
+    if (montoFueReducido && porcentajeEnganche <= 0) {
+      setError(
+        `Debes reducir realmente el monto de la compra a RD$ ${montoFinanciableMotor.toFixed(
+          2,
+        )} o menos.`,
+      );
 
       return;
     }
 
     if (requiereEnganche && !metodoPagoSeleccionado) {
-      setError("Debes seleccionar un método de pago para pagar el enganche.");
+      setError("Debes seleccionar un método para pagar el enganche.");
 
       return;
     }
 
     try {
       setProcessing(true);
+
       setError("");
+
       setMensaje("");
 
-      const response = await api.post("/bnpl/accept-risk-proposal", {
+      const payload = {
         evaluacion_id: evaluacionId,
 
         tienda_id: tienda.id,
 
         session_id: checkoutSessionId,
+      };
 
-        metodo_pago_id: Number(metodoPagoSeleccionado),
-      });
+      if (requiereEnganche) {
+        payload.metodo_pago_id = Number(metodoPagoSeleccionado);
+      }
 
-      alert(
-        response.data?.message ||
-          "El enganche fue pagado y la compra fue creada correctamente.",
-      );
+      const response = await api.post("/bnpl/accept-risk-proposal", payload);
+
+      alert(response.data?.message || "Propuesta aceptada.");
 
       navigate("/cartera");
+
       onClose();
     } catch (err) {
       console.error("Error aceptando propuesta:", err);
@@ -505,24 +540,32 @@ export default function CheckoutModal({ tienda, onClose, initialAmount }) {
 
       const codigo = respuesta.codigo;
 
+      if (codigo === "MONTO_SUPERA_CREDITO_ASIGNADO") {
+        setError(respuesta.message);
+
+        return;
+      }
+
+      if (codigo === "REDUCIR_MONTO_COMPRA") {
+        setError(respuesta.message || "Debes reducir el monto de la compra.");
+
+        return;
+      }
+
       if (codigo === "METODO_PAGO_REQUERIDO") {
-        setError("Debes seleccionar un método de pago para pagar el enganche.");
+        setError("Debes seleccionar un método de pago.");
 
         return;
       }
 
       if (codigo === "METODO_PAGO_INVALIDO") {
-        setError(
-          "El método de pago seleccionado no existe o no pertenece a tu cuenta.",
-        );
+        setError("El método seleccionado no es válido.");
 
         return;
       }
 
       if (codigo === "METODO_PAGO_SIN_TOKEN") {
-        setError(
-          "El método seleccionado no está habilitado para realizar cobros.",
-        );
+        setError("El método seleccionado no está habilitado para cobros.");
 
         return;
       }
@@ -534,79 +577,137 @@ export default function CheckoutModal({ tienda, onClose, initialAmount }) {
       }
 
       if (codigo === "ENGANCHE_YA_PROCESADO") {
-        setError(
-          respuesta.message ||
-            "El enganche de esta propuesta ya fue procesado.",
-        );
+        setError(respuesta.message || "Este enganche ya fue procesado.");
 
         return;
       }
 
       if (codigo === "PROPUESTA_YA_UTILIZADA") {
-        setError("Esta propuesta ya fue aceptada anteriormente.");
+        setError("Esta propuesta ya fue utilizada.");
 
         return;
       }
 
-      if (codigo === "CREDITO_DISPONIBLE_INSUFICIENTE") {
-        setError(
-          respuesta.message ||
-            "No tienes crédito suficiente para el monto financiado.",
-        );
-
-        return;
-      }
-
-      setError(
-        respuesta.message ||
-          "No se pudo pagar el enganche y aceptar la propuesta.",
-      );
+      setError(respuesta.message || "No se pudo aceptar la propuesta.");
     } finally {
       setProcessing(false);
     }
   };
 
   /* =============================================
-     CERRAR MODAL
+     SOLICITAR OPCIÓN SIN ENGANCHE
   ============================================= */
 
-  const handleCerrar = () => {
-    if (processing) {
+  const handleSolicitarSinEnganche = async () => {
+    if (processing || procesandoSinEnganche) {
       return;
     }
 
-    onClose();
+    if (!evaluacionId || !propuestaRiesgo) {
+      setError("No se encontró una evaluación válida.");
+
+      return;
+    }
+
+    if (montoOriginalPropuesta > creditoDisponible + 0.009) {
+      setError(
+        `La compra supera tu crédito disponible de RD$ ${creditoDisponible.toFixed(
+          2,
+        )}.`,
+      );
+
+      return;
+    }
+
+    try {
+      setProcesandoSinEnganche(true);
+
+      setError("");
+
+      setMensaje("Buscando una alternativa sin enganche...");
+
+      const response = await api.post("/bnpl/request-no-down-payment", {
+        evaluacion_id: evaluacionId,
+
+        tienda_id: tienda.id,
+
+        session_id: checkoutSessionId,
+      });
+
+      const nuevaPropuesta = response.data?.propuesta;
+
+      if (!nuevaPropuesta) {
+        setMensaje("");
+
+        setError(response.data?.message || "No se encontró una alternativa.");
+
+        return;
+      }
+
+      setPropuestaRiesgo(nuevaPropuesta);
+
+      setEvaluacionId(response.data?.evaluacion_id || evaluacionId);
+
+      setMensaje(
+        response.data?.message || "Se encontró una alternativa sin enganche.",
+      );
+    } catch (err) {
+      console.error("Error alternativa sin enganche:", err);
+
+      const respuesta = err.response?.data || {};
+
+      setMensaje("");
+
+      if (respuesta.codigo === "MONTO_SUPERA_CREDITO_ASIGNADO") {
+        setError(respuesta.message);
+
+        return;
+      }
+
+      if (
+        respuesta.codigo === "SIN_ENGANCHE_NO_DISPONIBLE" ||
+        respuesta.codigo === "ALTERNATIVA_SIN_ENGANCHE_NO_DISPONIBLE"
+      ) {
+        setError(respuesta.message || "No existe una opción sin enganche.");
+
+        return;
+      }
+
+      setError(
+        respuesta.message || "No se pudo generar una alternativa sin enganche.",
+      );
+    } finally {
+      setProcesandoSinEnganche(false);
+    }
   };
 
   /* =============================================
-     ABRIR PÁGINA DE DETALLES
+     DETALLES
   ============================================= */
 
   const handleVerDetallesEvaluacion = () => {
-    const datosEvaluacion = {
-      evaluacion_id: evaluacionId,
-
-      message: error,
-
-      causas: causasRechazo,
-
-      acciones_recomendadas: accionesRecomendadas,
-
-      fecha: new Date().toISOString(),
-
-      tienda: {
-        id: tienda.id,
-
-        nombre: tienda.nombre || tienda.name,
-      },
-
-      monto: montoNum,
-    };
-
     sessionStorage.setItem(
       "ultima_evaluacion_riesgo",
 
-      JSON.stringify(datosEvaluacion),
+      JSON.stringify({
+        evaluacion_id: evaluacionId,
+
+        message: error,
+
+        causas: causasRechazo,
+
+        acciones_recomendadas: accionesRecomendadas,
+
+        fecha: new Date().toISOString(),
+
+        tienda: {
+          id: tienda.id,
+
+          nombre: tienda.nombre || tienda.name,
+        },
+
+        monto: montoNum,
+      }),
     );
 
     navigate("/perfil-riesgo/detalles");
@@ -614,12 +715,22 @@ export default function CheckoutModal({ tienda, onClose, initialAmount }) {
     onClose();
   };
 
+  const handleCerrar = () => {
+    if (processing || procesandoSinEnganche) {
+      return;
+    }
+
+    onClose();
+  };
+
+  /* =============================================
+     UI
+  ============================================= */
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/80 backdrop-blur-sm p-4 animate-fade-in">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/80 backdrop-blur-sm p-4">
       <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-        {/* =====================================
-            HEADER
-        ===================================== */}
+        {/* HEADER */}
 
         <div className="bg-slate-950 p-6 text-white flex justify-between items-start shrink-0">
           <div>
@@ -637,8 +748,8 @@ export default function CheckoutModal({ tienda, onClose, initialAmount }) {
           <button
             type="button"
             onClick={handleCerrar}
-            disabled={processing}
-            className="bg-white/10 hover:bg-white/20 p-2 rounded-full transition disabled:opacity-50"
+            disabled={processing || procesandoSinEnganche}
+            className="bg-white/10 hover:bg-white/20 p-2 rounded-full disabled:opacity-50"
           >
             <X size={20} />
           </button>
@@ -646,19 +757,19 @@ export default function CheckoutModal({ tienda, onClose, initialAmount }) {
 
         <div className="p-6 overflow-y-auto">
           {loading ? (
-            <div className="flex flex-col items-center justify-center py-10 space-y-3">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" />
+            <div className="py-10 text-center">
+              <div className="mx-auto animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" />
 
-              <p className="text-sm text-slate-500">Verificando crédito...</p>
+              <p className="mt-3 text-sm text-slate-500">
+                Verificando crédito...
+              </p>
             </div>
           ) : (
             <form onSubmit={handleCheckout} className="space-y-6">
-              {/* =================================
-                  CRÉDITO DISPONIBLE
-              ================================= */}
+              {/* CRÉDITO */}
 
               <div
-                className={`border rounded-xl p-4 flex items-center justify-between transition-colors ${
+                className={`border rounded-xl p-4 ${
                   excedeCredito
                     ? "bg-red-50 border-red-200"
                     : "bg-emerald-50 border-emerald-100"
@@ -668,7 +779,7 @@ export default function CheckoutModal({ tienda, onClose, initialAmount }) {
                   <div
                     className={`p-2 rounded-full ${
                       excedeCredito
-                        ? "bg-red-100 text-red-600"
+                        ? "bg-red-100 text-red-700"
                         : "bg-emerald-100 text-emerald-700"
                     }`}
                   >
@@ -677,11 +788,11 @@ export default function CheckoutModal({ tienda, onClose, initialAmount }) {
 
                   <div>
                     <p
-                      className={`text-xs font-medium uppercase ${
-                        excedeCredito ? "text-red-800" : "text-emerald-800"
+                      className={`text-xs font-bold uppercase ${
+                        excedeCredito ? "text-red-700" : "text-emerald-700"
                       }`}
                     >
-                      Tu Crédito Disponible
+                      Tu crédito disponible
                     </p>
 
                     <p
@@ -692,15 +803,14 @@ export default function CheckoutModal({ tienda, onClose, initialAmount }) {
                       RD${" "}
                       {creditoDisponible.toLocaleString("es-DO", {
                         minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
                       })}
                     </p>
                   </div>
                 </div>
               </div>
 
-              {/* =================================
-                  MONTO
-              ================================= */}
+              {/* MONTO */}
 
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">
@@ -717,101 +827,96 @@ export default function CheckoutModal({ tienda, onClose, initialAmount }) {
                     step="0.01"
                     value={monto}
                     onChange={handleMontoChange}
-                    placeholder="0.00"
                     readOnly={Boolean(initialAmount)}
-                    className={`w-full pl-8 pr-4 py-3 text-lg font-semibold border-2 rounded-xl outline-none transition ${
+                    className={`w-full pl-8 pr-4 py-3 text-lg font-semibold border-2 rounded-xl outline-none ${
                       excedeCredito
-                        ? "border-red-300 text-red-600 focus:border-red-500 bg-red-50"
+                        ? "border-red-300 bg-red-50 text-red-700"
                         : initialAmount
-                          ? "border-slate-200 bg-slate-100 text-slate-600 cursor-not-allowed"
+                          ? "border-slate-200 bg-slate-100 text-slate-600"
                           : "border-slate-200 focus:border-slate-900"
                     }`}
-                    autoFocus={!initialAmount}
                   />
                 </div>
 
                 {excedeCredito && (
-                  <div className="mt-2 flex items-start gap-2 text-xs text-red-600 font-medium">
+                  <div className="mt-2 flex items-start gap-2 text-xs text-red-600 font-semibold">
                     <AlertCircle size={14} className="mt-0.5 shrink-0" />
 
                     <span>
-                      No tienes suficiente crédito para realizar esta compra.
+                      El total supera tu crédito disponible. Debes reducir la
+                      compra a{" "}
+                      {creditoDisponible.toLocaleString("es-DO", {
+                        style: "currency",
+
+                        currency: "DOP",
+                      })}{" "}
+                      o menos.
                     </span>
                   </div>
                 )}
               </div>
 
-              {/* =================================
-                  PLAN ACTUAL
-              ================================= */}
+              {/* PLAN */}
 
               <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
-                <div className="flex items-start gap-3 mb-3">
-                  <CheckCircle className="text-slate-900 mt-0.5" size={18} />
+                <div className="flex gap-3">
+                  <CheckCircle size={18} />
 
                   <div>
                     <p className="text-xs font-bold text-slate-500 uppercase">
-                      Plan activo en tu perfil
+                      Plan activo
                     </p>
 
-                    <p className="text-sm font-semibold text-slate-900">
+                    <p className="font-semibold">
                       {PREFS_LABELS[pref] || pref}
                     </p>
                   </div>
                 </div>
 
                 {montoNum > 0 && (
-                  <div className="border-t border-slate-200 pt-3 flex justify-between items-center text-slate-800">
-                    <span className="text-sm">
-                      Pagarás {numCuotas} cuotas de:
-                    </span>
+                  <div className="mt-4 pt-3 border-t flex justify-between">
+                    <span>Pagarás {numCuotas} cuotas de:</span>
 
-                    <span className="text-xl font-bold text-indigo-700">
-                      RD${" "}
+                    <strong className="text-indigo-700">
                       {montoCuota.toLocaleString("es-DO", {
-                        minimumFractionDigits: 2,
+                        style: "currency",
 
-                        maximumFractionDigits: 2,
+                        currency: "DOP",
                       })}
-                    </span>
+                    </strong>
                   </div>
                 )}
               </div>
 
-              {/* =================================
-                  PROPUESTA AJUSTADA
-              ================================= */}
+              {/* PROPUESTA */}
 
               {propuestaRiesgo && (
                 <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
-                  <div className="flex items-start gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
-                      <ShieldCheck size={20} />
-                    </div>
+                  <div className="flex gap-3">
+                    <ShieldCheck className="text-amber-700" />
 
                     <div>
-                      <p className="text-sm font-bold text-amber-950">
+                      <p className="font-bold text-amber-950">
                         Nueva propuesta del motor
                       </p>
 
-                      <p className="text-sm text-amber-800 mt-1">
-                        El financiamiento puede continuar con condiciones
-                        ajustadas.
+                      <p className="text-sm text-amber-700">
+                        Revisa las nuevas condiciones.
                       </p>
                     </div>
                   </div>
 
                   {propuestaRiesgo.motivo && (
-                    <p className="text-sm text-amber-800 mt-4">
+                    <p className="mt-4 text-sm text-amber-800">
                       {propuestaRiesgo.motivo}
                     </p>
                   )}
 
-                  <div className="mt-4 rounded-xl border border-amber-200 bg-white/70 divide-y divide-amber-100">
-                    <div className="flex justify-between gap-4 p-3 text-sm">
-                      <span className="text-slate-600">Monto original</span>
+                  <div className="mt-4 bg-white rounded-xl border divide-y">
+                    <div className="p-3 flex justify-between">
+                      <span>Monto original</span>
 
-                      <strong className="text-slate-900">
+                      <strong>
                         {montoOriginalPropuesta.toLocaleString("es-DO", {
                           style: "currency",
 
@@ -820,8 +925,8 @@ export default function CheckoutModal({ tienda, onClose, initialAmount }) {
                       </strong>
                     </div>
 
-                    <div className="flex justify-between gap-4 p-3 text-sm">
-                      <span className="text-slate-600">Monto financiado</span>
+                    <div className="p-3 flex justify-between">
+                      <span>Monto financiado</span>
 
                       <strong className="text-indigo-700">
                         {montoFinanciadoFinal.toLocaleString("es-DO", {
@@ -832,42 +937,48 @@ export default function CheckoutModal({ tienda, onClose, initialAmount }) {
                       </strong>
                     </div>
 
-                    <div className="flex justify-between gap-4 p-3 text-sm">
-                      <span className="text-slate-600">Enganche requerido</span>
+                    <div className="p-3 flex justify-between">
+                      <span>Enganche</span>
 
-                      <div className="text-right">
-                        <strong className="block text-slate-900">
-                          {montoEnganche.toLocaleString("es-DO", {
-                            style: "currency",
+                      {requiereEnganche ? (
+                        <div className="text-right">
+                          <strong>
+                            {montoEnganche.toLocaleString("es-DO", {
+                              style: "currency",
 
-                            currency: "DOP",
-                          })}
+                              currency: "DOP",
+                            })}
+                          </strong>
+
+                          <div className="text-xs text-slate-500">
+                            {porcentajeEnganche.toFixed(2)}%
+                          </div>
+                        </div>
+                      ) : (
+                        <strong className="text-emerald-700">
+                          No requerido
                         </strong>
-
-                        <span className="text-xs text-slate-500">
-                          {porcentajeEnganche.toFixed(2)}%
-                        </span>
-                      </div>
+                      )}
                     </div>
 
-                    <div className="flex justify-between gap-4 p-3 text-sm">
-                      <span className="text-slate-600">Cuotas solicitadas</span>
+                    <div className="p-3 flex justify-between">
+                      <span>Cuotas solicitadas</span>
 
-                      <strong className="text-slate-900">
+                      <strong>
                         {propuestaRiesgo.numero_cuotas_solicitadas ?? numCuotas}
                       </strong>
                     </div>
 
-                    <div className="flex justify-between gap-4 p-3 text-sm">
-                      <span className="text-slate-600">Cuotas permitidas</span>
+                    <div className="p-3 flex justify-between">
+                      <span>Cuotas permitidas</span>
 
                       <strong className="text-indigo-700">
                         {numeroCuotasPropuesta}
                       </strong>
                     </div>
 
-                    <div className="flex justify-between gap-4 p-3 text-sm">
-                      <span className="text-slate-600">Monto por cuota</span>
+                    <div className="p-3 flex justify-between">
+                      <span>Monto por cuota</span>
 
                       <strong className="text-indigo-700">
                         {montoCuotaPropuesta.toLocaleString("es-DO", {
@@ -879,23 +990,19 @@ export default function CheckoutModal({ tienda, onClose, initialAmount }) {
                     </div>
                   </div>
 
-                  {/* =============================
-                      MÉTODO PARA EL ENGANCHE
-                  ============================= */}
+                  {/* MÉTODO */}
 
                   {requiereEnganche && (
-                    <div className="mt-4 rounded-xl border border-amber-300 bg-white p-4">
-                      <div className="flex items-start gap-3">
-                        <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
-                          <CreditCard size={18} />
-                        </div>
+                    <div className="mt-4 border rounded-xl bg-white p-4">
+                      <div className="flex gap-3">
+                        <CreditCard />
 
                         <div>
-                          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                          <p className="text-xs font-bold uppercase text-slate-500">
                             Pago requerido ahora
                           </p>
 
-                          <p className="mt-1 text-2xl font-bold text-slate-950">
+                          <p className="text-xl font-bold">
                             {montoEnganche.toLocaleString("es-DO", {
                               style: "currency",
 
@@ -905,127 +1012,101 @@ export default function CheckoutModal({ tienda, onClose, initialAmount }) {
                         </div>
                       </div>
 
-                      <p className="mt-3 text-xs leading-relaxed text-slate-500">
-                        Este monto se cobrará ahora. El resto será financiado
-                        mediante BNPL.
-                      </p>
-
-                      <label className="mt-4 block text-sm font-semibold text-slate-700">
-                        Método para pagar el enganche
-                      </label>
-
                       {metodosPago.length > 0 ? (
                         <select
                           value={metodoPagoSeleccionado}
-                          onChange={(event) => {
-                            setMetodoPagoSeleccionado(event.target.value);
+                          onChange={(e) => {
+                            setMetodoPagoSeleccionado(e.target.value);
 
                             setError("");
                           }}
-                          className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-800 outline-none transition focus:border-amber-500"
+                          className="mt-4 w-full border rounded-xl p-3"
                         >
                           <option value="">Selecciona un método</option>
 
-                          {metodosPago.map((metodo) => {
-                            const marca =
-                              metodo.marca || metodo.tipo || "Método de pago";
-
-                            const ultimosDigitos =
-                              metodo.ultimos_cuatro_digitos ||
-                              metodo.ultimos4 ||
-                              "";
-
-                            return (
-                              <option key={metodo.id} value={metodo.id}>
-                                {marca}
-                                {ultimosDigitos
-                                  ? ` •••• ${ultimosDigitos}`
-                                  : ""}
-                                {metodo.es_predeterminado
-                                  ? " — Predeterminado"
-                                  : ""}
-                              </option>
-                            );
-                          })}
+                          {metodosPago.map((metodo) => (
+                            <option key={metodo.id} value={metodo.id}>
+                              {metodo.marca || metodo.tipo || "Método"}
+                              {metodo.ultimos_cuatro_digitos
+                                ? ` •••• ${metodo.ultimos_cuatro_digitos}`
+                                : ""}
+                            </option>
+                          ))}
                         </select>
                       ) : (
-                        <div className="mt-3 rounded-xl border border-red-200 bg-red-50 p-3">
-                          <p className="text-sm font-semibold text-red-700">
-                            No tienes un método de pago registrado.
-                          </p>
-
-                          <p className="mt-1 text-xs text-red-600">
-                            Debes registrar uno para pagar el enganche.
-                          </p>
-
-                          <button
-                            type="button"
-                            onClick={() => {
-                              onClose();
-
-                              navigate("/perfil/metodos-pago");
-                            }}
-                            className="mt-3 text-sm font-bold text-red-700 underline underline-offset-2"
-                          >
-                            Agregar método de pago
-                          </button>
-                        </div>
+                        <p className="mt-4 text-sm text-red-600">
+                          No tienes un método de pago registrado.
+                        </p>
                       )}
                     </div>
                   )}
 
                   {propuestaRiesgo.explicacion && (
-                    <p className="text-xs text-amber-700 mt-4">
+                    <p className="mt-4 text-xs text-amber-700">
                       {propuestaRiesgo.explicacion}
                     </p>
                   )}
+
+                  {montoFueReducido && porcentajeEnganche <= 0 && (
+                    <div className="mt-4 bg-red-50 border border-red-200 rounded-xl p-3 text-sm text-red-700">
+                      Debes reducir realmente el monto de la compra a{" "}
+                      {montoFinanciableMotor.toLocaleString("es-DO", {
+                        style: "currency",
+
+                        currency: "DOP",
+                      })}{" "}
+                      o menos.
+                    </div>
+                  )}
+
+                  {!requiereEnganche &&
+                    cuotasFueronReducidas &&
+                    !montoFueReducido && (
+                      <div className="mt-4 bg-blue-50 border border-blue-200 rounded-xl p-3 text-sm text-blue-700">
+                        No necesitas enganche. El motor solamente redujo el
+                        número de cuotas.
+                      </div>
+                    )}
                 </div>
               )}
 
-              {/* =================================
-                  MENSAJE INFORMATIVO
-              ================================= */}
+              {/* MENSAJE */}
 
               {mensaje && (
-                <div className="flex items-start gap-2 text-blue-700 bg-blue-50 p-3 rounded-lg text-sm border border-blue-200">
-                  <AlertCircle size={16} className="mt-0.5 shrink-0" />
+                <div className="bg-blue-50 border border-blue-200 text-blue-700 rounded-xl p-3 flex gap-2">
+                  {procesandoSinEnganche ? (
+                    <RefreshCw size={17} className="animate-spin" />
+                  ) : (
+                    <AlertCircle size={17} />
+                  )}
 
-                  <span>{mensaje}</span>
+                  <span className="text-sm">{mensaje}</span>
                 </div>
               )}
 
-              {/* =================================
-                  ERROR Y CAUSA REAL
-              ================================= */}
+              {/* ERROR */}
 
               {error && (
-                <div className="rounded-2xl border border-red-200 bg-red-50 p-4">
-                  <div className="flex items-start gap-3">
-                    <AlertCircle
-                      size={18}
-                      className="mt-0.5 shrink-0 text-red-600"
-                    />
+                <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-red-700">
+                  <div className="flex gap-2">
+                    <AlertCircle size={18} className="shrink-0" />
 
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-red-700">
-                        {error}
-                      </p>
+                    <div>
+                      <p className="font-semibold text-sm">{error}</p>
 
                       {causasRechazo.length > 0 && (
                         <div className="mt-3">
-                          <p className="text-xs font-bold uppercase tracking-wide text-red-700">
+                          <p className="text-xs font-bold uppercase">
                             Causa principal
                           </p>
 
-                          <p className="text-sm font-semibold text-red-800 mt-1">
+                          <p className="font-semibold">
                             {causasRechazo[0].nombre}
                           </p>
 
-                          {causasRechazo[0].descripcion && (
-                            <p className="text-xs text-red-600 mt-1">
-                              {causasRechazo[0].descripcion}
-                            </p>
-                          )}
+                          <p className="text-xs">
+                            {causasRechazo[0].descripcion}
+                          </p>
                         </div>
                       )}
 
@@ -1034,91 +1115,94 @@ export default function CheckoutModal({ tienda, onClose, initialAmount }) {
                         <button
                           type="button"
                           onClick={handleVerDetallesEvaluacion}
-                          className="mt-3 inline-flex items-center gap-2 text-xs font-bold text-red-700 underline underline-offset-2"
+                          className="mt-3 underline text-sm font-semibold"
                         >
-                          <ShieldCheck size={14} />
                           Ver detalles de la evaluación
                         </button>
-                      )}
-
-                      {mostrarDetallesRechazo && (
-                        <div className="mt-4">
-                          <button
-                            type="button"
-                            onClick={() => setMostrarDetallesRechazo(false)}
-                          >
-                            Ocultar detalles
-                          </button>
-                        </div>
                       )}
                     </div>
                   </div>
                 </div>
               )}
 
-              {/* =================================
-                  BOTÓN PRINCIPAL
-              ================================= */}
+              {/* BOTONES */}
 
               {propuestaRiesgo ? (
-                <button
-                  type="button"
-                  onClick={handleAceptarPropuesta}
-                  disabled={
-                    processing || faltaMetodoPago || metodosPago.length === 0
-                  }
-                  className={`w-full py-4 rounded-xl font-bold text-lg shadow-xl transition transform active:scale-[0.98] ${
-                    processing || faltaMetodoPago || metodosPago.length === 0
-                      ? "bg-slate-200 text-slate-400 cursor-not-allowed shadow-none"
-                      : "bg-amber-500 text-slate-950 hover:bg-amber-400 shadow-amber-200"
-                  }`}
-                >
-                  {processing
-                    ? "Procesando enganche..."
-                    : requiereEnganche
-                      ? `Pagar ${montoEnganche.toLocaleString("es-DO", {
-                          style: "currency",
+                <>
+                  {!montoFueReducido || porcentajeEnganche > 0 ? (
+                    <button
+                      type="button"
+                      onClick={handleAceptarPropuesta}
+                      disabled={
+                        processing ||
+                        procesandoSinEnganche ||
+                        faltaMetodoPago ||
+                        montoOriginalPropuesta > creditoDisponible + 0.009
+                      }
+                      className={`w-full py-4 rounded-xl font-bold ${
+                        processing || procesandoSinEnganche || faltaMetodoPago
+                          ? "bg-slate-200 text-slate-400"
+                          : "bg-amber-500 text-slate-950"
+                      }`}
+                    >
+                      {processing
+                        ? "Procesando..."
+                        : requiereEnganche
+                          ? `Pagar ${montoEnganche.toLocaleString("es-DO", {
+                              style: "currency",
 
-                          currency: "DOP",
-                        })} y confirmar`
-                      : "Aceptar nueva propuesta"}
-                </button>
+                              currency: "DOP",
+                            })} y confirmar`
+                          : "Aceptar nueva propuesta"}
+                    </button>
+                  ) : null}
+
+                  {requiereEnganche && (
+                    <button
+                      type="button"
+                      onClick={handleSolicitarSinEnganche}
+                      disabled={
+                        processing ||
+                        procesandoSinEnganche ||
+                        montoOriginalPropuesta > creditoDisponible + 0.009
+                      }
+                      className="w-full py-3 rounded-xl border-2 border-indigo-200 bg-indigo-50 text-indigo-700 font-bold"
+                    >
+                      {procesandoSinEnganche
+                        ? "Evaluando alternativa..."
+                        : "Solicitar opción sin enganche"}
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={handleCerrar}
+                    disabled={processing || procesandoSinEnganche}
+                    className="w-full py-3 rounded-xl border text-slate-600 font-semibold"
+                  >
+                    Cancelar compra
+                  </button>
+                </>
               ) : (
                 <button
                   type="submit"
-                  disabled={
-                    processing ||
-                    montoInvalido ||
-                    excedeCredito ||
-                    Boolean(error)
-                  }
-                  className={`w-full py-4 rounded-xl font-bold text-lg shadow-xl transition transform active:scale-[0.98] ${
-                    processing || montoInvalido || excedeCredito || error
-                      ? "bg-slate-200 text-slate-400 cursor-not-allowed shadow-none"
-                      : "bg-slate-900 text-white hover:bg-slate-800 shadow-slate-200"
+                  disabled={processing || montoInvalido || excedeCredito}
+                  className={`w-full py-4 rounded-xl font-bold ${
+                    processing || montoInvalido || excedeCredito
+                      ? "bg-slate-200 text-slate-400 cursor-not-allowed"
+                      : "bg-slate-900 text-white"
                   }`}
                 >
                   {processing ? "Procesando..." : "Confirmar Compra"}
                 </button>
               )}
 
-              {propuestaRiesgo && (
-                <button
-                  type="button"
-                  onClick={handleCerrar}
-                  disabled={processing}
-                  className="w-full py-3 rounded-xl border border-slate-200 text-slate-600 font-semibold hover:bg-slate-50 disabled:opacity-50"
-                >
-                  Rechazar propuesta
-                </button>
-              )}
-
               <p className="text-center text-[10px] text-slate-400 px-4">
-                {propuestaRiesgo
-                  ? requiereEnganche
-                    ? "El enganche se cobrará al método seleccionado antes de crear el financiamiento."
-                    : "La compra se creará después de aceptar las nuevas condiciones."
-                  : "Al confirmar, la compra será evaluada por el motor dinámico antes de crear el financiamiento."}
+                {excedeCredito
+                  ? "El crédito disponible es el máximo absoluto de la compra."
+                  : propuestaRiesgo && requiereEnganche
+                    ? "Puedes pagar el enganche o solicitar una alternativa sin enganche."
+                    : "La compra será evaluada por el motor dinámico antes de crear el financiamiento."}
               </p>
             </form>
           )}
