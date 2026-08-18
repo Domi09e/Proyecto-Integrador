@@ -7,6 +7,8 @@ import {
 
 import { recalcularPerfilRiesgoCliente } from "../services/risk-profile.service.js";
 
+import { sincronizarLineaCreditoCliente } from "../services/credit-line.service.js";
+
 const {
   Cliente,
   Tienda,
@@ -811,11 +813,7 @@ export const bnplCheckout = async (req, res) => {
       transaction,
     });
 
-    cliente.poder_credito = Number(
-      (creditoDisponible - montoFinanciable).toFixed(2),
-    );
-
-    await cliente.save({
+    const lineaActualizada = await sincronizarLineaCreditoCliente(cliente.id, {
       transaction,
     });
 
@@ -867,7 +865,7 @@ export const bnplCheckout = async (req, res) => {
         mensaje:
           `Compra en ${tienda.nombre} por RD$ ` +
           `${montoSolicitado.toFixed(2)}. Nuevo saldo disponible: RD$ ` +
-          `${Number(cliente.poder_credito).toFixed(2)}.`,
+          `${Number(lineaActualizada.credito_disponible).toFixed(2)}.`,
 
         url: "/cartera",
 
@@ -913,7 +911,15 @@ export const bnplCheckout = async (req, res) => {
         preferencia,
       },
 
-      nuevo_credito_disponible: Number(cliente.poder_credito),
+      nuevo_credito_disponible: lineaActualizada.credito_disponible,
+
+      linea_credito: {
+        limite_aprobado: lineaActualizada.limite_credito_aprobado,
+
+        saldo_utilizado: lineaActualizada.saldo_credito_utilizado,
+
+        disponible: lineaActualizada.credito_disponible,
+      },
     });
   } catch (error) {
     console.error("Error BNPL Checkout:", error);
@@ -1451,11 +1457,7 @@ export const acceptRiskProposal = async (req, res) => {
       transaction,
     });
 
-    cliente.poder_credito = Number(
-      (creditoDisponible - montoFinanciable).toFixed(2),
-    );
-
-    await cliente.save({
+    const lineaActualizada = await sincronizarLineaCreditoCliente(cliente.id, {
       transaction,
     });
 
@@ -1593,7 +1595,15 @@ export const acceptRiskProposal = async (req, res) => {
         preferencia: preferenciaAutorizada,
       },
 
-      nuevo_credito_disponible: Number(cliente.poder_credito),
+      nuevo_credito_disponible: lineaActualizada.credito_disponible,
+
+      linea_credito: {
+        limite_aprobado: lineaActualizada.limite_credito_aprobado,
+
+        saldo_utilizado: lineaActualizada.saldo_credito_utilizado,
+
+        disponible: lineaActualizada.credito_disponible,
+      },
     });
   } catch (error) {
     console.error("Error acceptRiskProposal:", error);
@@ -2109,11 +2119,7 @@ export const payInstallment = async (req, res) => {
       transaction: t,
     });
 
-    cliente.poder_credito = Number(
-      (Number(cliente.poder_credito) + montoPagado).toFixed(2),
-    );
-
-    await cliente.save({
+    const lineaActualizada = await sincronizarLineaCreditoCliente(cliente.id, {
       transaction: t,
     });
 
@@ -2138,7 +2144,9 @@ export const payInstallment = async (req, res) => {
           `Pagaste RD$ ${montoPagado.toFixed(2)} a ${nombreTienda} usando ` +
           `${metodo.marca || metodo.tipo} •••• ` +
           `${metodo.ultimos_cuatro_digitos || ""}. ` +
-          `Crédito recuperado.${mensajeExtra}`,
+          `Crédito disponible actualizado: RD$ ${Number(
+            lineaActualizada.credito_disponible,
+          ).toFixed(2)}.${mensajeExtra}`,
 
         url: "/cartera",
 
@@ -2160,7 +2168,15 @@ export const payInstallment = async (req, res) => {
 
       message: "Pago realizado correctamente.",
 
-      nuevo_credito: cliente.poder_credito,
+      nuevo_credito: lineaActualizada.credito_disponible,
+
+      linea_credito: {
+        limite_aprobado: lineaActualizada.limite_credito_aprobado,
+
+        saldo_utilizado: lineaActualizada.saldo_credito_utilizado,
+
+        disponible: lineaActualizada.credito_disponible,
+      },
     });
   } catch (error) {
     console.error("Error payInstallment:", error);

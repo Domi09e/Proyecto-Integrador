@@ -28,6 +28,7 @@ import adminSnblRoutes from "./routes/admin.snbl.routes.js";
 import { fileURLToPath } from "url";
 import clientClaimsRoutes from "./routes/client.claims.routes.js";
 import  adminCreditIncreaseRoutes  from "./routes/admin.credit_increase.routes.js";
+import adminRiskReviewRoutes from "./routes/admin.risk_review.routes.js"
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -62,6 +63,7 @@ app.use("/api/admin", adminAuditRoutes);
 app.use("/api/client", clientSnblRoutes);
 app.use("/api/admin", adminSnblRoutes);
 app.use("/api/admin", adminCreditIncreaseRoutes);
+app.use("/api/admin", adminRiskReviewRoutes)
 
 // 🔥 ESTAS SON LAS RUTAS QUE EL FRONT NECESITA
 app.use("/api/tiendas", tiendaRoutes);

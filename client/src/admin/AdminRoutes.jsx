@@ -19,6 +19,7 @@ import AuditPage from "./settings/auditPage";
 import AdminGoalsPage from "./Pages/AdminGoalsPage";
 import RiskConfigPage from "./Pages/RiskConfigPage";
 import CreditIncreaseRequests from "./Pages/CreditIncreaseRequests";
+import RiskReviewPage from "./Pages/RiskReviewPage";
 
 function AdminRoute({ children }) {
   const { isAuthenticated, loading } = useAdminAuth();
@@ -59,6 +60,7 @@ export default function AdminRoutes() {
           <Route path="soporte" element={<SupportPage />} />
           <Route path="metas" element={<AdminGoalsPage />} />
           <Route path="riesgos" element={<RiskConfigPage />} />
+          <Route path="riesgo-operativo" element={<RiskReviewPage />} />
 
           {/* Configuración del Sistema */}
           <Route path="config" element={<ConfigPage />} />

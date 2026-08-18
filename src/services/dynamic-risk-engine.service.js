@@ -926,7 +926,6 @@ const analizarSenalesFraude = ({ perfil, contexto, montoSolicitado }) => {
 
   /*
    * Compra nocturna.
-   * Por sí sola no significa fraude, por eso su impacto es bajo.
    */
   if (hora >= 0 && hora <= 4) {
     puntajeFraude += 5;
@@ -1068,21 +1067,10 @@ const calcularEngancheDinamico = ({
 
   const clienteNuevo = completados === 0 && totalCuotasPagadas === 0;
 
-  /*
-   * Ejemplo:
-   *
-   * Crédito: 20,000
-   * Compra: 5,000
-   * usoCredito = 0.25 = 25 %
-   */
   const usoCredito = credito > 0 ? monto / credito : 2;
 
   /*
    * Riesgo crítico.
-   *
-   * El enganche NO debe utilizarse
-   * para convertir una operación
-   * crítica en aprobada.
    */
   if (puntaje < 30 || fraude >= 80) {
     return 100;
@@ -1090,10 +1078,6 @@ const calcularEngancheDinamico = ({
 
   /* ==========================================
      CLIENTE NUEVO
-
-     Bajo + compra pequeña = 0-10 %
-     Medio = 15-25 %
-     Monto elevado = 20-30 %
   ========================================== */
 
   if (clienteNuevo) {
@@ -1104,30 +1088,18 @@ const calcularEngancheDinamico = ({
       alertas === 0 &&
       activos <= 1;
 
-    /*
-     * Compra hasta 35 % del crédito.
-     */
     if (perfilNuevoSano && usoCredito <= 0.35) {
       return 0;
     }
 
-    /*
-     * Compra entre 35 % y 50 %.
-     */
     if (perfilNuevoSano && usoCredito <= 0.5) {
       return 5;
     }
 
-    /*
-     * Compra entre 50 % y 65 %.
-     */
     if (perfilNuevoSano && usoCredito <= 0.65) {
       return 10;
     }
 
-    /*
-     * Riesgo medio.
-     */
     if (puntaje >= 50 && fraude < 40) {
       if (usoCredito <= 0.5) {
         return 15;
@@ -1144,10 +1116,6 @@ const calcularEngancheDinamico = ({
       return 30;
     }
 
-    /*
-     * Cliente nuevo con riesgo más alto,
-     * pero todavía no crítico.
-     */
     if (usoCredito <= 0.6) {
       return 20;
     }
@@ -1163,9 +1131,6 @@ const calcularEngancheDinamico = ({
      CLIENTE RECURRENTE
   ========================================== */
 
-  /*
-   * Historial excelente.
-   */
   const historialExcelente =
     completados >= 2 &&
     puntualidad >= 95 &&
@@ -1175,17 +1140,11 @@ const calcularEngancheDinamico = ({
     alertas === 0;
 
   if (historialExcelente) {
-    /*
-     * Solo una compra extremadamente cercana
-     * al crédito disponible recibe 5 %.
-     */
     return usoCredito > 0.85 ? 5 : 0;
   }
 
   /*
-   * Recurrente con riesgo alto.
-   *
-   * 30-40 %
+   * Riesgo alto.
    */
   if (puntaje < 50) {
     let enganche = 30;
@@ -1202,9 +1161,7 @@ const calcularEngancheDinamico = ({
   }
 
   /*
-   * Recurrente con algunos atrasos.
-   *
-   * 10-25 %
+   * Algunos atrasos.
    */
   if (cuotasTardias > 0) {
     let enganche = 10;
@@ -1219,8 +1176,7 @@ const calcularEngancheDinamico = ({
   }
 
   /*
-   * Recurrente sin atrasos pero
-   * todavía con riesgo medio.
+   * Riesgo medio.
    */
   if (puntaje < 70) {
     if (usoCredito <= 0.5) {
@@ -1235,7 +1191,7 @@ const calcularEngancheDinamico = ({
   }
 
   /*
-   * Buen historial general.
+   * Buen historial.
    */
   return usoCredito > 0.85 ? 10 : 0;
 };
@@ -1373,7 +1329,7 @@ const generarDecision = ({
   }
 
   /*
-   * 5. Riesgo alto: monto reducido y enganche alto.
+   * 5. Riesgo alto.
    */
   if (puntajeCrediticio < 50) {
     const montoReducido = Math.min(montoSolicitado * 0.5, montoBaseFinanciable);
@@ -1424,7 +1380,7 @@ const generarDecision = ({
   }
 
   /*
-   * 7. Solicita más cuotas de las recomendadas.
+   * 7. Más cuotas de las recomendadas.
    */
   if (numeroCuotasSolicitadas > maximoCuotas) {
     return {
@@ -1449,21 +1405,10 @@ const generarDecision = ({
 
   /*
    * 8. Riesgo medio.
-   *
-   * Si el cálculo dinámico determina 0 %,
-   * no existe realmente una condición de
-   * enganche y la compra puede aprobarse
-   * normalmente.
    */
   if (puntajeCrediticio < 70) {
     const cuotasPermitidas = Math.min(numeroCuotasSolicitadas, maximoCuotas);
 
-    /*
-     * Si no hay enganche y tampoco se
-     * modificaron las cuotas, no hay ninguna
-     * condición nueva que el cliente tenga
-     * que aceptar.
-     */
     if (engancheDinamico <= 0 && cuotasPermitidas === numeroCuotasSolicitadas) {
       return {
         decision: DECISIONES.APROBACION_NORMAL,
@@ -1485,9 +1430,6 @@ const generarDecision = ({
       };
     }
 
-    /*
-     * Hay enganche real.
-     */
     if (engancheDinamico > 0) {
       return {
         decision: DECISIONES.APROBACION_ENGANCHE_MAYOR,
@@ -1508,10 +1450,6 @@ const generarDecision = ({
       };
     }
 
-    /*
-     * No hay enganche, pero las cuotas
-     * fueron modificadas.
-     */
     return {
       decision: DECISIONES.CUOTAS_REDUCIDAS,
 
@@ -1700,7 +1638,7 @@ export const evaluarCompraDinamicamente = async ({
     }
 
     /*
-     * Antes de evaluar, actualizamos el perfil 360.
+     * Actualizamos perfil 360.
      */
     await recalcularPerfilRiesgoCliente(clienteIdNumerico, {
       transaction,
@@ -1777,6 +1715,10 @@ export const evaluarCompraDinamicamente = async ({
         contexto.dispositivo_id || contexto.user_agent || contexto.dispositivo,
       );
 
+    /* =================================================
+       CREAR EVALUACIÓN
+    ================================================= */
+
     const evaluacion = await EvaluacionDinamica.create(
       {
         cliente_id: clienteIdNumerico,
@@ -1813,6 +1755,22 @@ export const evaluarCompraDinamicamente = async ({
 
         requiere_revision_manual: resultadoDecision.requiereRevisionManual,
 
+        /* =============================================
+           NUEVO:
+           TODA REVISIÓN MANUAL NACE COMO PENDIENTE
+        ============================================= */
+
+        estado_revision:
+          resultadoDecision.decision === DECISIONES.REVISION_MANUAL
+            ? "pendiente"
+            : null,
+
+        usuario_revision_id: null,
+
+        comentario_revision: null,
+
+        fecha_revision: null,
+
         bloqueo_preventivo: resultadoDecision.bloqueoPreventivo,
 
         motivo_principal: resultadoDecision.motivoPrincipal,
@@ -1836,6 +1794,10 @@ export const evaluarCompraDinamicamente = async ({
       },
     );
 
+    /* =================================================
+       GUARDAR SEÑALES
+    ================================================= */
+
     const todasLasSenales = [
       ...analisisCredito.senales,
       ...analisisFraude.senales,
@@ -1853,6 +1815,10 @@ export const evaluarCompraDinamicamente = async ({
         },
       );
     }
+
+    /* =================================================
+       GENERAR ALERTAS
+    ================================================= */
 
     const alertas = obtenerAlertasDesdeSenales({
       clienteId: clienteIdNumerico,
@@ -1872,10 +1838,10 @@ export const evaluarCompraDinamicamente = async ({
       });
     }
 
-    /*
-     * Guardamos el cambio de perfil producido
-     * por esta evaluación.
-     */
+    /* =================================================
+       HISTORIAL DEL PERFIL
+    ================================================= */
+
     await HistorialPerfilRiesgo.create(
       {
         cliente_id: clienteIdNumerico,
@@ -1911,9 +1877,10 @@ export const evaluarCompraDinamicamente = async ({
       },
     );
 
-    /*
-     * Actualizamos los valores dinámicos del perfil.
-     */
+    /* =================================================
+       ACTUALIZAR PERFIL DINÁMICO
+    ================================================= */
+
     await perfil.update(
       {
         puntaje_crediticio: perfil.puntaje_crediticio || 50,
@@ -1944,6 +1911,10 @@ export const evaluarCompraDinamicamente = async ({
     if (debeGestionarTransaccion) {
       await transaction.commit();
     }
+
+    /* =================================================
+       RESPUESTA DEL MOTOR
+    ================================================= */
 
     return {
       evaluacion_id: evaluacion.id,

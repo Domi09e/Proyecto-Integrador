@@ -192,7 +192,12 @@ export default function AdminLayout() {
               <SidebarLink
                 to="/admin/riesgos"
                 icon={<Shield size={20} />}
-                label="Riesgos"
+                label="Config. Riesgos"
+              />
+              <SidebarLink
+                to="/admin/riesgo-operativo"
+                icon={<ShieldAlert size={20} />}
+                label="Centro de Riesgo"
               />
             </div>
           </div>
