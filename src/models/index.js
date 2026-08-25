@@ -42,7 +42,8 @@ import SenalEvaluacionModel from "./senal_evaluacion.model.js";
 import AlertaRiesgoModel from "./alerta_riesgo.model.js";
 import HistorialPerfilRiesgoModel from "./historial_perfil_riesgo.model.js";
 import PagoEngancheModel from "./pago_enganche.model.js";
-import HistorialLimiteCreditoModel from "./historial_limite_credito.model.js"
+import HistorialLimiteCreditoModel from "./historial_limite_credito.model.js";
+import HistorialContextoCompraModel from "./historial_contexto_compra.model.js";
 
 const db = {};
 
@@ -111,6 +112,8 @@ db.HistorialPerfilRiesgo = HistorialPerfilRiesgoModel(sequelize, DataTypes);
 db.PagoEnganche = PagoEngancheModel(sequelize, Sequelize.DataTypes);
 
 db.HistorialLimiteCredito = HistorialLimiteCreditoModel(sequelize, DataTypes);
+
+db.HistorialContextoCompra = HistorialContextoCompraModel(sequelize, DataTypes);
 
 /* ==========================================
    ASOCIACIONES GENERALES
@@ -655,49 +658,63 @@ db.PagoEnganche.belongsTo(db.MetodoPago, {
    HISTORIAL DE LÍMITES DE CRÉDITO
 ===================================================== */
 
-db.Cliente.hasMany(
-  db.HistorialLimiteCredito,
-  {
-    foreignKey:
-      "cliente_id",
+db.Cliente.hasMany(db.HistorialLimiteCredito, {
+  foreignKey: "cliente_id",
 
-    as:
-      "historial_limites_credito",
-  },
-);
+  as: "historial_limites_credito",
+});
 
-db.HistorialLimiteCredito.belongsTo(
-  db.Cliente,
-  {
-    foreignKey:
-      "cliente_id",
+db.HistorialLimiteCredito.belongsTo(db.Cliente, {
+  foreignKey: "cliente_id",
 
-    as:
-      "cliente",
-  },
-);
+  as: "cliente",
+});
 
-db.Usuario.hasMany(
-  db.HistorialLimiteCredito,
-  {
-    foreignKey:
-      "usuario_admin_id",
+db.Usuario.hasMany(db.HistorialLimiteCredito, {
+  foreignKey: "usuario_admin_id",
 
-    as:
-      "ajustes_limite_credito",
-  },
-);
+  as: "ajustes_limite_credito",
+});
 
-db.HistorialLimiteCredito.belongsTo(
-  db.Usuario,
-  {
-    foreignKey:
-      "usuario_admin_id",
+db.HistorialLimiteCredito.belongsTo(db.Usuario, {
+  foreignKey: "usuario_admin_id",
 
-    as:
-      "administrador",
-  },
-);
+  as: "administrador",
+});
+
+/* =====================================================
+   HISTORIAL DE CONTEXTO DE COMPRAS
+===================================================== */
+
+db.Cliente.hasMany(db.HistorialContextoCompra, {
+  foreignKey: "cliente_id",
+  as: "historial_contexto_compras",
+});
+
+db.HistorialContextoCompra.belongsTo(db.Cliente, {
+  foreignKey: "cliente_id",
+  as: "cliente",
+});
+
+db.EvaluacionDinamica.hasOne(db.HistorialContextoCompra, {
+  foreignKey: "evaluacion_id",
+  as: "contexto_compra",
+});
+
+db.HistorialContextoCompra.belongsTo(db.EvaluacionDinamica, {
+  foreignKey: "evaluacion_id",
+  as: "evaluacion",
+});
+
+db.Orden.hasOne(db.HistorialContextoCompra, {
+  foreignKey: "orden_id",
+  as: "contexto_compra",
+});
+
+db.HistorialContextoCompra.belongsTo(db.Orden, {
+  foreignKey: "orden_id",
+  as: "orden",
+});
 
 /* ==========================================
    METADATOS
