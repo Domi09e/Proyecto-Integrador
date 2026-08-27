@@ -22,6 +22,10 @@ import {
   CircleDollarSign,
   CreditCard,
   Landmark,
+  Smartphone,
+  MapPin,
+  Wifi,
+  Activity,
 } from "lucide-react";
 
 import api from "../../api/axios";
@@ -57,6 +61,40 @@ const titleCase = (value) =>
     .replaceAll("_", " ")
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 
+const formatPercent = (value) => {
+  if (value === null || value === undefined || value === "") {
+    return "—";
+  }
+
+  const number = Number(value);
+
+  if (!Number.isFinite(number)) {
+    return "—";
+  }
+
+  return `${number >= 0 ? "+" : ""}${number.toFixed(2)}%`;
+};
+
+const formatKm = (value) => {
+  if (value === null || value === undefined || value === "") {
+    return "—";
+  }
+
+  const number = Number(value);
+
+  if (!Number.isFinite(number)) {
+    return "—";
+  }
+
+  return `${number.toFixed(2)} km`;
+};
+
+const yesNo = (value) => (value ? "Sí" : "No");
+
+const obtenerMensajeError = (error, fallback) => {
+  return error?.response?.data?.message || error?.message || fallback;
+};
+
 const getSeverityClasses = (severity) => {
   const map = {
     baja: "bg-slate-100 text-slate-700",
@@ -90,10 +128,6 @@ const getReviewStateClasses = (state) => {
   };
 
   return map[state] || "bg-slate-100 text-slate-700";
-};
-
-const obtenerMensajeError = (error, fallback) => {
-  return error?.response?.data?.message || error?.message || fallback;
 };
 
 /* =====================================================
@@ -139,6 +173,10 @@ export default function RiskReviewPage() {
   const [selectedReview, setSelectedReview] = useState(null);
 
   const [comment, setComment] = useState("");
+
+  /* =====================================================
+     APROBACIÓN CONDICIONADA
+  ===================================================== */
 
   const [showConditionalForm, setShowConditionalForm] = useState(false);
 
@@ -272,6 +310,7 @@ export default function RiskReviewPage() {
 
   useEffect(() => {
     refreshAll();
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -279,6 +318,7 @@ export default function RiskReviewPage() {
     if (!loading) {
       fetchAlerts();
     }
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [alertPage, alertState, severity]);
 
@@ -286,6 +326,7 @@ export default function RiskReviewPage() {
     if (!loading) {
       fetchReviews();
     }
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reviewPage, reviewState]);
 
@@ -307,7 +348,7 @@ export default function RiskReviewPage() {
   };
 
   /* =====================================================
-     OBTENER LÍNEA DE CRÉDITO
+     LÍNEA DE CRÉDITO
   ===================================================== */
 
   const fetchCreditLine = async (clienteId) => {
@@ -326,6 +367,7 @@ export default function RiskReviewPage() {
       if (data?.success) {
         setCreditLine({
           ...(data.linea_credito || {}),
+
           historial: Array.isArray(data.historial) ? data.historial : [],
         });
       } else {
@@ -345,7 +387,7 @@ export default function RiskReviewPage() {
   };
 
   /* =====================================================
-     DETALLE ALERTA
+     ABRIR ALERTA
   ===================================================== */
 
   const openAlert = async (id) => {
@@ -375,7 +417,7 @@ export default function RiskReviewPage() {
   };
 
   /* =====================================================
-     DETALLE REVISIÓN
+     ABRIR REVISIÓN
   ===================================================== */
 
   const openReview = async (id) => {
@@ -406,7 +448,7 @@ export default function RiskReviewPage() {
   };
 
   /* =====================================================
-     AJUSTAR AL RECOMENDADO
+     APLICAR LÍMITE RECOMENDADO
   ===================================================== */
 
   const applyRecommendedLimit = async (clienteId) => {
@@ -418,6 +460,7 @@ export default function RiskReviewPage() {
 
     if (recomendado <= 0) {
       showError("El cliente no tiene un límite recomendado válido.");
+
       return;
     }
 
@@ -456,6 +499,7 @@ export default function RiskReviewPage() {
       showSuccess(data?.message || "El límite fue ajustado al recomendado.");
 
       await fetchCreditLine(clienteId);
+
       await refreshAll();
     } catch (err) {
       console.error("Error aplicando límite recomendado:", err);
@@ -469,7 +513,7 @@ export default function RiskReviewPage() {
   };
 
   /* =====================================================
-     AJUSTE MANUAL
+     AJUSTE MANUAL DE CRÉDITO
   ===================================================== */
 
   const submitManualCreditLimit = async (clienteId) => {
@@ -479,11 +523,13 @@ export default function RiskReviewPage() {
 
     if (!Number.isFinite(nuevoLimite) || nuevoLimite <= 0) {
       showError("Debes indicar un nuevo límite mayor que cero.");
+
       return;
     }
 
     if (!motivo) {
       showError("Debes indicar el motivo del ajuste manual.");
+
       return;
     }
 
@@ -502,6 +548,7 @@ export default function RiskReviewPage() {
         `/admin/risk-review/clients/${clienteId}/credit-line/manual`,
         {
           nuevo_limite: nuevoLimite,
+
           motivo,
         },
       );
@@ -516,6 +563,7 @@ export default function RiskReviewPage() {
       setShowManualCreditForm(false);
 
       await fetchCreditLine(clienteId);
+
       await refreshAll();
     } catch (err) {
       console.error("Error ajuste manual:", err);
@@ -544,6 +592,7 @@ export default function RiskReviewPage() {
         `/admin/risk-review/alerts/${selectedAlert.id}/${action}`,
         {
           comentario: comment,
+
           ...extra,
         },
       );
@@ -555,6 +604,7 @@ export default function RiskReviewPage() {
       setComment("");
 
       await refreshAll();
+
       await openAlert(alertaId);
     } catch (err) {
       console.error("Error procesando alerta:", err);
@@ -566,7 +616,7 @@ export default function RiskReviewPage() {
   };
 
   /* =====================================================
-     BLOQUEAR / DESBLOQUEAR
+     BLOQUEAR CLIENTE
   ===================================================== */
 
   const blockClient = async () => {
@@ -600,6 +650,7 @@ export default function RiskReviewPage() {
       showSuccess(data?.message || "Cliente bloqueado preventivamente.");
 
       await openAlert(selectedAlert.id);
+
       await fetchSummary();
     } catch (err) {
       showError(obtenerMensajeError(err, "No se pudo bloquear al cliente."));
@@ -607,6 +658,10 @@ export default function RiskReviewPage() {
       setProcessing(false);
     }
   };
+
+  /* =====================================================
+     DESBLOQUEAR CLIENTE
+  ===================================================== */
 
   const unblockClient = async () => {
     const clientId = selectedAlert?.cliente?.id;
@@ -633,6 +688,7 @@ export default function RiskReviewPage() {
       showSuccess(data?.message || "Cliente desbloqueado correctamente.");
 
       await openAlert(selectedAlert.id);
+
       await fetchSummary();
     } catch (err) {
       showError(obtenerMensajeError(err, "No se pudo desbloquear al cliente."));
@@ -642,7 +698,7 @@ export default function RiskReviewPage() {
   };
 
   /* =====================================================
-     ACCIONES REVISIÓN MANUAL
+     ACCIONES DE REVISIÓN MANUAL
   ===================================================== */
 
   const reviewAction = async (action, payload = {}) => {
@@ -661,17 +717,14 @@ export default function RiskReviewPage() {
       showSuccess(data?.message || "Revisión actualizada.");
 
       setComment("");
+
       setShowConditionalForm(false);
 
       await refreshAll();
 
-      /*
-       * Después de finalizar una revisión puede dejar de
-       * aparecer con requiere_revision_manual=true.
-       * Por eso cerramos el modal si terminó.
-       */
       if (["approve", "conditional-approve", "reject"].includes(action)) {
         setSelectedReview(null);
+
         setCreditLine(null);
       } else {
         await openReview(selectedReview.id);
@@ -694,6 +747,7 @@ export default function RiskReviewPage() {
   const rejectReview = () => {
     if (!comment.trim()) {
       showError("Debes indicar el motivo del rechazo.");
+
       return;
     }
 
@@ -721,6 +775,7 @@ export default function RiskReviewPage() {
 
     reviewAction("conditional-approve", {
       porcentaje_enganche: downPayment,
+
       numero_cuotas: installments,
 
       comentario:
@@ -738,29 +793,41 @@ export default function RiskReviewPage() {
     () => [
       {
         label: "Alertas abiertas",
+
         value: summary.alertas_abiertas || 0,
+
         icon: AlertTriangle,
+
         color: "bg-rose-50 text-rose-700 border-rose-100",
       },
 
       {
         label: "Alertas críticas",
+
         value: summary.alertas_criticas || 0,
+
         icon: ShieldAlert,
+
         color: "bg-orange-50 text-orange-700 border-orange-100",
       },
 
       {
         label: "Revisiones pendientes",
+
         value: summary.revisiones_pendientes || 0,
+
         icon: ClipboardCheck,
+
         color: "bg-amber-50 text-amber-700 border-amber-100",
       },
 
       {
         label: "Clientes bloqueados",
+
         value: summary.clientes_bloqueados || 0,
+
         icon: UserX,
+
         color: "bg-slate-100 text-slate-700 border-slate-200",
       },
     ],
@@ -801,8 +868,8 @@ export default function RiskReviewPage() {
             </h1>
 
             <p className="text-sm text-slate-500">
-              Monitoreo de riesgo, revisiones manuales y administración de
-              líneas de crédito.
+              Monitoreo de riesgo, revisiones manuales, comportamiento de
+              compras y administración de líneas de crédito.
             </p>
           </div>
         </div>
@@ -845,7 +912,7 @@ export default function RiskReviewPage() {
         })}
       </div>
 
-      {/* PANEL */}
+      {/* PANEL PRINCIPAL */}
 
       <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
         {/* TABS */}
@@ -903,6 +970,7 @@ export default function RiskReviewPage() {
                   value={alertState}
                   onChange={(event) => {
                     setAlertPage(1);
+
                     setAlertState(event.target.value);
                   }}
                   className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl"
@@ -910,9 +978,13 @@ export default function RiskReviewPage() {
                   <option value="">Todos los estados</option>
 
                   <option value="abierta">Abierta</option>
+
                   <option value="en_revision">En revisión</option>
+
                   <option value="confirmada">Confirmada</option>
+
                   <option value="descartada">Descartada</option>
+
                   <option value="resuelta">Resuelta</option>
                 </select>
 
@@ -920,6 +992,7 @@ export default function RiskReviewPage() {
                   value={severity}
                   onChange={(event) => {
                     setAlertPage(1);
+
                     setSeverity(event.target.value);
                   }}
                   className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl"
@@ -927,8 +1000,11 @@ export default function RiskReviewPage() {
                   <option value="">Todas las severidades</option>
 
                   <option value="baja">Baja</option>
+
                   <option value="media">Media</option>
+
                   <option value="alta">Alta</option>
+
                   <option value="critica">Crítica</option>
                 </select>
               </>
@@ -937,6 +1013,7 @@ export default function RiskReviewPage() {
                 value={reviewState}
                 onChange={(event) => {
                   setReviewPage(1);
+
                   setReviewState(event.target.value);
                 }}
                 className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl"
@@ -1017,7 +1094,9 @@ export default function RiskReviewPage() {
           }
           onClose={() => {
             setSelectedAlert(null);
+
             setCreditLine(null);
+
             setShowManualCreditForm(false);
           }}
           onStart={() => alertAction("start-review")}
@@ -1056,8 +1135,11 @@ export default function RiskReviewPage() {
           }
           onClose={() => {
             setSelectedReview(null);
+
             setCreditLine(null);
+
             setShowConditionalForm(false);
+
             setShowManualCreditForm(false);
           }}
           onStart={() => reviewAction("start")}
@@ -1189,7 +1271,7 @@ function AlertsTable({ alerts, onOpen, page, pages, setPage }) {
 }
 
 /* =====================================================
-   TABLA REVISIONES
+   TABLA REVISIONES MANUALES
 ===================================================== */
 
 function ReviewsTable({ reviews, onOpen, page, pages, setPage }) {
@@ -1311,7 +1393,7 @@ function CreditLinePanel({
     return (
       <div className="border border-slate-200 rounded-2xl p-5 text-center text-slate-500">
         <RefreshCw className="mx-auto animate-spin mb-2" />
-        Cargando línea de crédito...
+        Cargando información del cliente...
       </div>
     );
   }
@@ -1319,10 +1401,14 @@ function CreditLinePanel({
   if (!creditLine) {
     return (
       <div className="border border-slate-200 rounded-2xl p-5 text-center text-slate-500">
-        No se pudo obtener la línea de crédito del cliente.
+        No se pudo obtener la información financiera del cliente.
       </div>
     );
   }
+
+  /* =====================================================
+     LÍNEA DE CRÉDITO
+  ===================================================== */
 
   const aprobado = Number(creditLine.limite_aprobado || 0);
 
@@ -1335,204 +1421,463 @@ function CreditLinePanel({
   const diferencia = recomendado - aprobado;
 
   const recomendadoMayor = diferencia > 0.009;
+
   const recomendadoMenor = diferencia < -0.009;
+
   const mismoLimite = Math.abs(diferencia) <= 0.009;
 
+  /* =====================================================
+     HISTORIAL DE COMPORTAMIENTO
+  ===================================================== */
+
+  const historialComportamiento = Array.isArray(
+    creditLine.historial_comportamiento,
+  )
+    ? creditLine.historial_comportamiento
+    : [];
+
+  const resumenComportamiento = creditLine.resumen_comportamiento || {};
+
+  const cantidadHistorica = Number(
+    resumenComportamiento.cantidad_compras ??
+      historialComportamiento.length ??
+      0,
+  );
+
+  const promedioHistorico = Number(resumenComportamiento.promedio_monto || 0);
+
+  const minimoHistorico = Number(resumenComportamiento.monto_minimo || 0);
+
+  const maximoHistorico = Number(resumenComportamiento.monto_maximo || 0);
+
+  const tienePatron = Boolean(resumenComportamiento.tiene_patron_suficiente);
+
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-2">
-        <Landmark size={20} className="text-indigo-600" />
+    <div className="space-y-6">
+      {/* =================================================
+          LÍNEA DE CRÉDITO
+      ================================================= */}
 
-        <h3 className="font-bold text-slate-900">Línea de crédito</h3>
-      </div>
+      <div className="space-y-4">
+        <div className="flex items-center gap-2">
+          <Landmark size={20} className="text-indigo-600" />
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <CreditMetric
-          label="Límite aprobado"
-          value={money(aprobado)}
-          icon={CreditCard}
-          color="indigo"
-        />
+          <h3 className="font-bold text-slate-900">Línea de crédito</h3>
+        </div>
 
-        <CreditMetric
-          label="Saldo utilizado"
-          value={money(utilizado)}
-          icon={WalletCards}
-          color="amber"
-        />
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <CreditMetric
+            label="Límite aprobado"
+            value={money(aprobado)}
+            icon={CreditCard}
+            color="indigo"
+          />
 
-        <CreditMetric
-          label="Disponible"
-          value={money(disponible)}
-          icon={CircleDollarSign}
-          color="emerald"
-        />
+          <CreditMetric
+            label="Saldo utilizado"
+            value={money(utilizado)}
+            icon={WalletCards}
+            color="amber"
+          />
 
-        <CreditMetric
-          label="Recomendado"
-          value={recomendado > 0 ? money(recomendado) : "Sin calcular"}
-          icon={
-            recomendadoMayor
-              ? TrendingUp
-              : recomendadoMenor
-                ? TrendingDown
-                : Equal
-          }
-          color={
-            recomendadoMayor ? "emerald" : recomendadoMenor ? "rose" : "slate"
-          }
-        />
-      </div>
+          <CreditMetric
+            label="Disponible"
+            value={money(disponible)}
+            icon={CircleDollarSign}
+            color="emerald"
+          />
 
-      {recomendado > 0 && (
-        <div
-          className={`rounded-xl border p-4 ${
-            recomendadoMayor
-              ? "border-emerald-200 bg-emerald-50"
-              : recomendadoMenor
-                ? "border-amber-200 bg-amber-50"
-                : "border-slate-200 bg-slate-50"
-          }`}
-        >
-          <div className="flex items-start gap-3">
-            {recomendadoMayor ? (
-              <TrendingUp className="text-emerald-600 shrink-0" size={21} />
-            ) : recomendadoMenor ? (
-              <TrendingDown className="text-amber-600 shrink-0" size={21} />
-            ) : (
-              <CheckCircle2 className="text-slate-600 shrink-0" size={21} />
-            )}
+          <CreditMetric
+            label="Recomendado"
+            value={recomendado > 0 ? money(recomendado) : "Sin calcular"}
+            icon={
+              recomendadoMayor
+                ? TrendingUp
+                : recomendadoMenor
+                  ? TrendingDown
+                  : Equal
+            }
+            color={
+              recomendadoMayor ? "emerald" : recomendadoMenor ? "rose" : "slate"
+            }
+          />
+        </div>
 
-            <div>
-              <p className="font-bold text-slate-900">
-                {recomendadoMayor
-                  ? "El motor recomienda aumentar el límite"
-                  : recomendadoMenor
-                    ? "El motor recomienda reducir el límite"
-                    : "El límite está alineado con la recomendación"}
-              </p>
+        {recomendado > 0 && (
+          <div
+            className={`rounded-xl border p-4 ${
+              recomendadoMayor
+                ? "border-emerald-200 bg-emerald-50"
+                : recomendadoMenor
+                  ? "border-amber-200 bg-amber-50"
+                  : "border-slate-200 bg-slate-50"
+            }`}
+          >
+            <div className="flex items-start gap-3">
+              {recomendadoMayor ? (
+                <TrendingUp className="text-emerald-600 shrink-0" size={21} />
+              ) : recomendadoMenor ? (
+                <TrendingDown className="text-amber-600 shrink-0" size={21} />
+              ) : (
+                <CheckCircle2 className="text-slate-600 shrink-0" size={21} />
+              )}
 
-              {!mismoLimite && (
-                <p className="text-sm text-slate-600 mt-1">
-                  Diferencia: <strong>{money(Math.abs(diferencia))}</strong>
+              <div>
+                <p className="font-bold text-slate-900">
                   {recomendadoMayor
-                    ? " por encima del límite actual."
-                    : " por debajo del límite actual."}
+                    ? "El motor recomienda aumentar el límite"
+                    : recomendadoMenor
+                      ? "El motor recomienda reducir el límite"
+                      : "El límite está alineado con la recomendación"}
                 </p>
-              )}
 
-              {recomendadoMenor && utilizado > recomendado && (
-                <div className="mt-3 rounded-lg bg-white/70 border border-amber-200 p-3">
-                  <p className="text-xs text-amber-800">
-                    El saldo utilizado actualmente es superior al nuevo límite
-                    recomendado. Si se aplica la reducción, el cliente
-                    conservará toda su deuda actual y su crédito disponible
-                    quedará en RD$ 0.00 hasta que pague lo suficiente.
+                {!mismoLimite && (
+                  <p className="text-sm text-slate-600 mt-1">
+                    Diferencia: <strong>{money(Math.abs(diferencia))}</strong>
+                    {recomendadoMayor
+                      ? " por encima del límite actual."
+                      : " por debajo del límite actual."}
                   </p>
-                </div>
-              )}
+                )}
+
+                {recomendadoMenor && utilizado > recomendado && (
+                  <div className="mt-3 rounded-lg bg-white/70 border border-amber-200 p-3">
+                    <p className="text-xs text-amber-800">
+                      El saldo utilizado actualmente es superior al nuevo límite
+                      recomendado. Si se aplica la reducción, el cliente
+                      conservará toda su deuda actual y su crédito disponible
+                      quedará en RD$ 0.00 hasta que pague lo suficiente.
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
+        )}
+
+        <div className="grid sm:grid-cols-2 gap-2">
+          <button
+            type="button"
+            disabled={processing || recomendado <= 0 || mismoLimite}
+            onClick={onApplyRecommended}
+            className="w-full py-3 px-4 rounded-xl bg-indigo-600 text-white font-bold hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          >
+            <ShieldCheck size={17} />
+            Ajustar al recomendado
+          </button>
+
+          <button
+            type="button"
+            disabled={processing}
+            onClick={() => setShowManualForm(!showManualForm)}
+            className="w-full py-3 px-4 rounded-xl border border-slate-300 bg-white text-slate-700 font-bold hover:bg-slate-50 disabled:opacity-40 flex items-center justify-center gap-2"
+          >
+            <PencilLine size={17} />
+            Definir otro límite
+          </button>
         </div>
-      )}
 
-      <div className="grid sm:grid-cols-2 gap-2">
-        <button
-          type="button"
-          disabled={processing || recomendado <= 0 || mismoLimite}
-          onClick={onApplyRecommended}
-          className="w-full py-3 px-4 rounded-xl bg-indigo-600 text-white font-bold hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-        >
-          <ShieldCheck size={17} />
-          Ajustar al recomendado
-        </button>
+        {/* =================================================
+            AJUSTE MANUAL
+        ================================================= */}
 
-        <button
-          type="button"
-          disabled={processing}
-          onClick={() => setShowManualForm(!showManualForm)}
-          className="w-full py-3 px-4 rounded-xl border border-slate-300 bg-white text-slate-700 font-bold hover:bg-slate-50 disabled:opacity-40 flex items-center justify-center gap-2"
-        >
-          <PencilLine size={17} />
-          Definir otro límite
-        </button>
+        {showManualForm && (
+          <div className="border border-indigo-200 bg-indigo-50 rounded-2xl p-4 space-y-4">
+            <div>
+              <p className="font-bold text-indigo-900">
+                Ajuste manual de límite
+              </p>
+
+              <p className="text-xs text-indigo-700 mt-1">
+                Todo cambio quedará registrado en el historial administrativo.
+              </p>
+            </div>
+
+            <div>
+              <label className="text-xs font-bold text-slate-600 uppercase">
+                Nuevo límite aprobado
+              </label>
+
+              <input
+                type="number"
+                min="1"
+                step="0.01"
+                value={manualData.nuevo_limite}
+                onChange={(event) =>
+                  setManualData((old) => ({
+                    ...old,
+
+                    nuevo_limite: event.target.value,
+                  }))
+                }
+                placeholder="Ejemplo: 30000"
+                className="mt-1 w-full border border-slate-200 rounded-xl p-3 bg-white outline-none focus:border-indigo-500"
+              />
+            </div>
+
+            <div>
+              <label className="text-xs font-bold text-slate-600 uppercase">
+                Motivo obligatorio
+              </label>
+
+              <textarea
+                rows={3}
+                value={manualData.motivo}
+                onChange={(event) =>
+                  setManualData((old) => ({
+                    ...old,
+
+                    motivo: event.target.value,
+                  }))
+                }
+                placeholder="Explica por qué se modifica el límite..."
+                className="mt-1 w-full border border-slate-200 rounded-xl p-3 bg-white outline-none focus:border-indigo-500"
+              />
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                type="button"
+                disabled={processing}
+                onClick={onManualSubmit}
+                className="flex-1 py-3 rounded-xl bg-indigo-600 text-white font-bold hover:bg-indigo-500 disabled:opacity-50"
+              >
+                Guardar nuevo límite
+              </button>
+
+              <button
+                type="button"
+                disabled={processing}
+                onClick={() => setShowManualForm(false)}
+                className="px-5 py-3 rounded-xl bg-white border border-slate-200 text-slate-700 font-bold"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
-      {showManualForm && (
-        <div className="border border-indigo-200 bg-indigo-50 rounded-2xl p-4 space-y-4">
-          <div>
-            <p className="font-bold text-indigo-900">Ajuste manual de límite</p>
+      {/* =================================================
+          HISTORIAL DE COMPORTAMIENTO
+      ================================================= */}
 
-            <p className="text-xs text-indigo-700 mt-1">
-              Todo cambio quedará registrado en el historial administrativo.
+      <div className="border-t border-slate-200 pt-5">
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4">
+          <div className="flex items-start gap-2">
+            <Activity size={20} className="text-indigo-600 mt-0.5" />
+
+            <div>
+              <h3 className="font-bold text-slate-900">
+                Historial de comportamiento del cliente
+              </h3>
+
+              <p className="text-xs text-slate-500 mt-1">
+                Compras formalizadas utilizadas por el motor como referencia
+                para detectar cambios de monto, dispositivo y ubicación.
+              </p>
+            </div>
+          </div>
+
+          <span
+            className={`inline-flex w-fit px-3 py-1 rounded-full text-xs font-bold ${
+              tienePatron
+                ? "bg-emerald-100 text-emerald-700"
+                : "bg-amber-100 text-amber-700"
+            }`}
+          >
+            {tienePatron ? "Patrón establecido" : "Historial insuficiente"}
+          </span>
+        </div>
+
+        {/* RESUMEN */}
+
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+          <InfoBox label="Compras confiables" value={cantidadHistorica} />
+
+          <InfoBox
+            label="Promedio histórico"
+            value={cantidadHistorica > 0 ? money(promedioHistorico) : "—"}
+          />
+
+          <InfoBox
+            label="Monto mínimo"
+            value={cantidadHistorica > 0 ? money(minimoHistorico) : "—"}
+          />
+
+          <InfoBox
+            label="Monto máximo"
+            value={cantidadHistorica > 0 ? money(maximoHistorico) : "—"}
+          />
+        </div>
+
+        {/* TABLA */}
+
+        {!historialComportamiento.length ? (
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-5 text-center">
+            <History size={26} className="mx-auto text-slate-400 mb-2" />
+
+            <p className="font-semibold text-slate-700">
+              Sin historial de comportamiento
+            </p>
+
+            <p className="text-xs text-slate-500 mt-1">
+              Todavía no existen compras formalizadas marcadas como referencia
+              confiable.
             </p>
           </div>
+        ) : (
+          <div className="overflow-x-auto rounded-xl border border-slate-200">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 text-slate-500">
+                <tr>
+                  <th className="text-left px-4 py-3">Fecha</th>
 
-          <div>
-            <label className="text-xs font-bold text-slate-600 uppercase">
-              Nuevo límite aprobado
-            </label>
+                  <th className="text-left px-4 py-3">Monto</th>
 
-            <input
-              type="number"
-              min="1"
-              step="0.01"
-              value={manualData.nuevo_limite}
-              onChange={(event) =>
-                setManualData((old) => ({
-                  ...old,
-                  nuevo_limite: event.target.value,
-                }))
-              }
-              placeholder="Ejemplo: 30000"
-              className="mt-1 w-full border border-slate-200 rounded-xl p-3 bg-white outline-none focus:border-indigo-500"
-            />
+                  <th className="text-left px-4 py-3">Dispositivo</th>
+
+                  <th className="text-left px-4 py-3">IP</th>
+
+                  <th className="text-left px-4 py-3">Ubicación</th>
+
+                  <th className="text-left px-4 py-3">Estado</th>
+                </tr>
+              </thead>
+
+              <tbody className="divide-y divide-slate-100">
+                {historialComportamiento.map((item) => {
+                  const ubicacion =
+                    [item.ciudad, item.region, item.pais]
+                      .filter(Boolean)
+                      .join(", ") || "Sin ubicación";
+
+                  return (
+                    <tr key={item.id} className="hover:bg-slate-50">
+                      {/* FECHA */}
+
+                      <td className="px-4 py-3 text-slate-500 whitespace-nowrap">
+                        {formatDate(item.created_at)}
+                      </td>
+
+                      {/* MONTO */}
+
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <div>
+                          <p className="font-bold text-slate-900">
+                            {money(item.monto_actual)}
+                          </p>
+
+                          {item.monto_fuera_patron && (
+                            <span className="inline-flex mt-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-700">
+                              Fuera del patrón
+                            </span>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* DISPOSITIVO */}
+
+                      <td className="px-4 py-3">
+                        <div className="flex items-start gap-2">
+                          <Smartphone
+                            size={15}
+                            className="text-slate-400 shrink-0 mt-0.5"
+                          />
+
+                          <div>
+                            <p className="text-xs font-semibold text-slate-700 max-w-[180px] truncate">
+                              {item.dispositivo_id || "Sin identificador"}
+                            </p>
+
+                            <p
+                              className={`text-[10px] font-semibold mt-0.5 ${
+                                item.dispositivo_nuevo
+                                  ? "text-amber-600"
+                                  : "text-emerald-600"
+                              }`}
+                            >
+                              {item.dispositivo_nuevo ? "Nuevo" : "Conocido"}
+                            </p>
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* IP */}
+
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <Wifi size={14} className="text-slate-400 shrink-0" />
+
+                          <div>
+                            <p className="text-xs text-slate-600">
+                              {item.ip || "—"}
+                            </p>
+
+                            <p
+                              className={`text-[10px] font-semibold ${
+                                item.ip_nueva
+                                  ? "text-amber-600"
+                                  : "text-emerald-600"
+                              }`}
+                            >
+                              {item.ip_nueva ? "Nueva" : "Conocida"}
+                            </p>
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* UBICACIÓN */}
+
+                      <td className="px-4 py-3">
+                        <div className="flex items-start gap-2">
+                          <MapPin
+                            size={14}
+                            className="text-slate-400 shrink-0 mt-0.5"
+                          />
+
+                          <div>
+                            <p className="text-xs text-slate-600 max-w-[220px]">
+                              {ubicacion}
+                            </p>
+
+                            {item.latitud !== null &&
+                              item.latitud !== undefined &&
+                              item.longitud !== null &&
+                              item.longitud !== undefined && (
+                                <p className="text-[10px] text-slate-400 mt-0.5">
+                                  {Number(item.latitud).toFixed(4)}
+
+                                  {", "}
+
+                                  {Number(item.longitud).toFixed(4)}
+                                </p>
+                              )}
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* ESTADO */}
+
+                      <td className="px-4 py-3">
+                        <span className="inline-flex px-2 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700">
+                          Referencia confiable
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
+        )}
+      </div>
 
-          <div>
-            <label className="text-xs font-bold text-slate-600 uppercase">
-              Motivo obligatorio
-            </label>
+      {/* =================================================
+          HISTORIAL DE LÍMITES
+      ================================================= */}
 
-            <textarea
-              rows={3}
-              value={manualData.motivo}
-              onChange={(event) =>
-                setManualData((old) => ({
-                  ...old,
-                  motivo: event.target.value,
-                }))
-              }
-              placeholder="Explica por qué se modifica el límite..."
-              className="mt-1 w-full border border-slate-200 rounded-xl p-3 bg-white outline-none focus:border-indigo-500"
-            />
-          </div>
-
-          <div className="flex gap-2">
-            <button
-              type="button"
-              disabled={processing}
-              onClick={onManualSubmit}
-              className="flex-1 py-3 rounded-xl bg-indigo-600 text-white font-bold hover:bg-indigo-500 disabled:opacity-50"
-            >
-              Guardar nuevo límite
-            </button>
-
-            <button
-              type="button"
-              disabled={processing}
-              onClick={() => setShowManualForm(false)}
-              className="px-5 py-3 rounded-xl bg-white border border-slate-200 text-slate-700 font-bold"
-            >
-              Cancelar
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* HISTORIAL */}
-
-      <div className="border-t border-slate-200 pt-4">
+      <div className="border-t border-slate-200 pt-5">
         <div className="flex items-center gap-2 mb-3">
           <History size={18} className="text-slate-500" />
 
@@ -1559,7 +1904,9 @@ function CreditLinePanel({
                     <div>
                       <p className="text-sm font-bold text-slate-800">
                         {money(anterior)}
+
                         {" → "}
+
                         {money(nuevo)}
                       </p>
 
@@ -1637,7 +1984,7 @@ function CreditMetric({ label, value, icon: Icon, color = "slate" }) {
   };
 
   return (
-    <div className={`rounded-xl border p-3 ${colors[color]}`}>
+    <div className={`rounded-xl border p-3 ${colors[color] || colors.slate}`}>
       <Icon size={18} />
 
       <p className="text-[10px] uppercase tracking-wide font-bold opacity-70 mt-2">
@@ -1645,6 +1992,408 @@ function CreditMetric({ label, value, icon: Icon, color = "slate" }) {
       </p>
 
       <p className="font-bold text-sm mt-1">{value}</p>
+    </div>
+  );
+}
+
+/* =====================================================
+   CONTEXTO Y COMPORTAMIENTO DE COMPRA
+===================================================== */
+
+function PurchaseContextPanel({ context }) {
+  if (!context) {
+    return (
+      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+        <div className="flex items-center gap-2">
+          <Activity size={18} className="text-slate-500" />
+
+          <div>
+            <h3 className="font-bold text-slate-800">
+              Contexto y comportamiento de la compra
+            </h3>
+
+            <p className="text-xs text-slate-500 mt-1">
+              Esta evaluación no posee contexto histórico asociado. Las
+              evaluaciones anteriores a la incorporación de este módulo pueden
+              aparecer sin estos datos.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const purchaseCount = Number(context.cantidad_compras_historial || 0);
+
+  const locationText =
+    [context.ciudad, context.region, context.pais].filter(Boolean).join(", ") ||
+    "Sin ubicación textual";
+
+  const coordinates =
+    context.latitud !== null &&
+    context.latitud !== undefined &&
+    context.longitud !== null &&
+    context.longitud !== undefined
+      ? `${Number(context.latitud).toFixed(5)}, ${Number(
+          context.longitud,
+        ).toFixed(5)}`
+      : "—";
+
+  const amountOutsidePattern = Boolean(context.monto_fuera_patron);
+
+  const deviceNew = Boolean(context.dispositivo_nuevo);
+
+  const ipNew = Boolean(context.ip_nueva);
+
+  const locationNew = Boolean(context.ubicacion_nueva);
+
+  const inconsistentLocation = Boolean(context.ubicacion_inconsistente);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2">
+        <Activity size={20} className="text-indigo-600" />
+
+        <div>
+          <h3 className="font-bold text-slate-900">
+            Contexto y comportamiento de la compra
+          </h3>
+
+          <p className="text-xs text-slate-500 mt-0.5">
+            Comparación de la operación actual con registros confiables
+            anteriores del cliente.
+          </p>
+        </div>
+      </div>
+
+      {/* MONTO */}
+
+      <div
+        className={`rounded-2xl border p-4 ${
+          amountOutsidePattern
+            ? "border-rose-200 bg-rose-50"
+            : "border-slate-200 bg-slate-50"
+        }`}
+      >
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
+          <div className="flex items-center gap-2">
+            <CircleDollarSign
+              size={19}
+              className={
+                amountOutsidePattern ? "text-rose-600" : "text-indigo-600"
+              }
+            />
+
+            <h4 className="font-bold text-slate-900">
+              Comportamiento de consumo
+            </h4>
+          </div>
+
+          <span
+            className={`inline-flex w-fit px-2.5 py-1 rounded-full text-xs font-bold ${
+              amountOutsidePattern
+                ? "bg-rose-100 text-rose-700"
+                : purchaseCount >= 3
+                  ? "bg-emerald-100 text-emerald-700"
+                  : "bg-slate-200 text-slate-700"
+            }`}
+          >
+            {amountOutsidePattern
+              ? "Monto fuera del patrón"
+              : purchaseCount >= 3
+                ? "Monto dentro del patrón"
+                : "Historial insuficiente"}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+          <InfoBox label="Compra actual" value={money(context.monto_actual)} />
+
+          <InfoBox label="Compras históricas" value={purchaseCount} />
+
+          <InfoBox
+            label="Promedio histórico"
+            value={
+              context.promedio_monto_historico !== null &&
+              context.promedio_monto_historico !== undefined
+                ? money(context.promedio_monto_historico)
+                : "—"
+            }
+          />
+
+          <InfoBox
+            label="Mínimo histórico"
+            value={
+              context.monto_minimo_historico !== null &&
+              context.monto_minimo_historico !== undefined
+                ? money(context.monto_minimo_historico)
+                : "—"
+            }
+          />
+
+          <InfoBox
+            label="Máximo histórico"
+            value={
+              context.monto_maximo_historico !== null &&
+              context.monto_maximo_historico !== undefined
+                ? money(context.monto_maximo_historico)
+                : "—"
+            }
+          />
+
+          <InfoBox
+            label="Variación vs promedio"
+            value={formatPercent(context.porcentaje_variacion_monto)}
+          />
+        </div>
+
+        {amountOutsidePattern && (
+          <div className="mt-3 rounded-xl border border-rose-200 bg-white/70 p-3">
+            <div className="flex gap-2">
+              <AlertTriangle
+                size={18}
+                className="text-rose-600 shrink-0 mt-0.5"
+              />
+
+              <div>
+                <p className="font-bold text-sm text-rose-800">
+                  Monto inusual respecto al historial
+                </p>
+
+                <p className="text-sm text-rose-700 mt-1">
+                  La compra actual se encuentra muy por encima del
+                  comportamiento habitual registrado para el cliente.
+                </p>
+
+                <p className="text-xs text-rose-600 mt-2">
+                  Esta condición participa en el cálculo de fraude de la
+                  operación.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* DISPOSITIVO / IP */}
+
+      <div className="rounded-2xl border border-slate-200 p-4 bg-white">
+        <div className="flex items-center gap-2 mb-4">
+          <Smartphone size={19} className="text-indigo-600" />
+
+          <h4 className="font-bold text-slate-900">Dispositivo y red</h4>
+        </div>
+
+        <div className="grid sm:grid-cols-2 gap-3">
+          <div
+            className={`rounded-xl border p-3 ${
+              deviceNew
+                ? "border-amber-200 bg-amber-50"
+                : "border-slate-200 bg-slate-50"
+            }`}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-[11px] uppercase tracking-wide font-bold text-slate-500">
+                Dispositivo
+              </p>
+
+              <span
+                className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${
+                  deviceNew
+                    ? "bg-amber-100 text-amber-700"
+                    : "bg-emerald-100 text-emerald-700"
+                }`}
+              >
+                {deviceNew ? "Nuevo" : "Conocido"}
+              </span>
+            </div>
+
+            <p className="mt-2 text-sm font-semibold text-slate-800 break-all">
+              {context.dispositivo_id || "Sin identificador"}
+            </p>
+
+            {context.user_agent && (
+              <div className="mt-3 border-t border-slate-200 pt-2">
+                <p className="text-[10px] uppercase font-bold text-slate-400">
+                  Navegador / dispositivo
+                </p>
+
+                <p className="text-xs text-slate-500 mt-1 break-words">
+                  {context.user_agent}
+                </p>
+              </div>
+            )}
+
+            {deviceNew && (
+              <p className="text-xs text-amber-700 font-medium mt-3">
+                El dispositivo actual no aparece en el historial confiable del
+                cliente.
+              </p>
+            )}
+          </div>
+
+          <div
+            className={`rounded-xl border p-3 ${
+              ipNew
+                ? "border-amber-200 bg-amber-50"
+                : "border-slate-200 bg-slate-50"
+            }`}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5">
+                <Wifi size={15} className="text-slate-500" />
+
+                <p className="text-[11px] uppercase tracking-wide font-bold text-slate-500">
+                  Dirección IP
+                </p>
+              </div>
+
+              <span
+                className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${
+                  ipNew
+                    ? "bg-amber-100 text-amber-700"
+                    : "bg-emerald-100 text-emerald-700"
+                }`}
+              >
+                {ipNew ? "Nueva" : "Conocida"}
+              </span>
+            </div>
+
+            <p className="mt-2 text-sm font-semibold text-slate-800 break-all">
+              {context.ip || "No disponible"}
+            </p>
+
+            {ipNew && (
+              <p className="text-xs text-amber-700 font-medium mt-3">
+                La dirección IP no coincide con las registradas previamente.
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* UBICACIÓN */}
+
+      <div
+        className={`rounded-2xl border p-4 ${
+          inconsistentLocation
+            ? "border-rose-200 bg-rose-50"
+            : locationNew
+              ? "border-amber-200 bg-amber-50"
+              : "border-slate-200 bg-slate-50"
+        }`}
+      >
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
+          <div className="flex items-center gap-2">
+            <MapPin
+              size={19}
+              className={
+                inconsistentLocation
+                  ? "text-rose-600"
+                  : locationNew
+                    ? "text-amber-600"
+                    : "text-indigo-600"
+              }
+            />
+
+            <h4 className="font-bold text-slate-900">Ubicación geográfica</h4>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            {locationNew && (
+              <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-700">
+                Ubicación nueva
+              </span>
+            )}
+
+            {inconsistentLocation && (
+              <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-rose-100 text-rose-700">
+                Ubicación inconsistente
+              </span>
+            )}
+
+            {!locationNew && !inconsistentLocation && (
+              <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700">
+                Ubicación conocida
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+          <InfoBox label="Ubicación" value={locationText} />
+
+          <InfoBox label="Coordenadas" value={coordinates} />
+
+          <InfoBox
+            label="Distancia ubicación anterior"
+            value={formatKm(context.distancia_ubicacion_anterior_km)}
+          />
+
+          <InfoBox
+            label="Precisión GPS"
+            value={
+              context.precision_ubicacion !== null &&
+              context.precision_ubicacion !== undefined
+                ? `${Number(context.precision_ubicacion).toFixed(0)} m`
+                : "—"
+            }
+          />
+
+          <InfoBox label="Ubicación nueva" value={yesNo(locationNew)} />
+
+          <InfoBox
+            label="Inconsistencia geográfica"
+            value={yesNo(inconsistentLocation)}
+          />
+        </div>
+
+        {inconsistentLocation && (
+          <div className="mt-3 rounded-xl border border-rose-200 bg-white/70 p-3">
+            <div className="flex gap-2">
+              <AlertTriangle
+                size={18}
+                className="text-rose-600 shrink-0 mt-0.5"
+              />
+
+              <p className="text-sm text-rose-800">
+                Se detectó un cambio geográfico considerable respecto a la
+                ubicación registrada anteriormente.
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* TRAZABILIDAD */}
+
+      <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+        <div className="flex items-center gap-2 mb-3">
+          <History size={17} className="text-slate-500" />
+
+          <h4 className="text-sm font-bold text-slate-800">
+            Trazabilidad del contexto
+          </h4>
+        </div>
+
+        <div className="grid sm:grid-cols-3 gap-3">
+          <InfoBox
+            label="Estado operación"
+            value={titleCase(context.estado_operacion)}
+          />
+
+          <InfoBox label="Decisión" value={titleCase(context.decision)} />
+
+          <InfoBox
+            label="Referencia de comportamiento"
+            value={context.es_referencia_comportamiento ? "Sí" : "No"}
+          />
+        </div>
+
+        <p className="text-[11px] text-slate-400 mt-3">
+          Contexto registrado: {formatDate(context.created_at)}
+        </p>
+      </div>
     </div>
   );
 }
@@ -1658,20 +2407,27 @@ function AlertDetailModal({
   comment,
   setComment,
   processing,
+
   creditLine,
   loadingCreditLine,
+
   showManualCreditForm,
   setShowManualCreditForm,
+
   manualCreditData,
   setManualCreditData,
+
   onApplyRecommended,
   onManualCreditSubmit,
+
   onClose,
+
   onStart,
   onConfirm,
   onConfirmAndBlock,
   onDiscard,
   onResolve,
+
   onBlock,
   onUnblock,
 }) {
@@ -1697,6 +2453,12 @@ function AlertDetailModal({
           <p className="font-bold text-rose-800">{alert.titulo}</p>
 
           <p className="text-sm text-rose-700 mt-1">{alert.descripcion}</p>
+
+          {alert.codigo_alerta && (
+            <p className="text-[11px] text-rose-500 mt-2 font-semibold">
+              Código: {alert.codigo_alerta}
+            </p>
+          )}
         </div>
 
         {/* LÍNEA DE CRÉDITO */}
@@ -1755,16 +2517,51 @@ function AlertDetailModal({
 
               <InfoBox
                 label="Score crédito"
-                value={`${alert.evaluacion.puntaje_crediticio}/100`}
+                value={`${Number(
+                  alert.evaluacion.puntaje_crediticio || 0,
+                ).toFixed(0)}/100`}
               />
 
               <InfoBox
                 label="Fraude operación"
-                value={`${alert.evaluacion.puntaje_fraude}/100`}
+                value={`${Number(alert.evaluacion.puntaje_fraude || 0).toFixed(
+                  0,
+                )}/100`}
+              />
+
+              <InfoBox
+                label="Nivel"
+                value={titleCase(alert.evaluacion.nivel_riesgo)}
+              />
+
+              <InfoBox
+                label="Decisión"
+                value={titleCase(alert.evaluacion.decision)}
+              />
+
+              <InfoBox
+                label="Fecha"
+                value={formatDate(alert.evaluacion.fecha)}
               />
             </div>
+
+            {alert.evaluacion.motivo && (
+              <div className="mt-3 p-3 rounded-xl border border-slate-200 bg-slate-50">
+                <p className="text-xs font-bold uppercase text-slate-500">
+                  Motivo
+                </p>
+
+                <p className="text-sm text-slate-700 mt-1">
+                  {alert.evaluacion.motivo}
+                </p>
+              </div>
+            )}
           </div>
         )}
+
+        {/* NUEVO: CONTEXTO */}
+
+        <PurchaseContextPanel context={alert.evaluacion?.contexto_compra} />
 
         {/* SEÑALES */}
 
@@ -1777,6 +2574,8 @@ function AlertDetailModal({
             <SignalsList signals={alert.evaluacion.senales} />
           </div>
         )}
+
+        {/* COMENTARIO */}
 
         <div>
           <label className="text-sm font-bold text-slate-700">
@@ -1791,6 +2590,8 @@ function AlertDetailModal({
             className="mt-2 w-full border border-slate-200 rounded-xl p-3 outline-none focus:border-indigo-500"
           />
         </div>
+
+        {/* ACCIONES */}
 
         <div className="grid sm:grid-cols-2 gap-2">
           {alert.estado === "abierta" && (
@@ -1867,7 +2668,7 @@ function AlertDetailModal({
 }
 
 /* =====================================================
-   MODAL REVISIÓN
+   MODAL REVISIÓN MANUAL
 ===================================================== */
 
 function ReviewDetailModal({
@@ -1875,22 +2676,31 @@ function ReviewDetailModal({
   comment,
   setComment,
   processing,
+
   creditLine,
   loadingCreditLine,
+
   showManualCreditForm,
   setShowManualCreditForm,
+
   manualCreditData,
   setManualCreditData,
+
   onApplyRecommended,
   onManualCreditSubmit,
+
   onClose,
+
   onStart,
   onApprove,
   onReject,
+
   showConditionalForm,
   setShowConditionalForm,
+
   conditionalData,
   setConditionalData,
+
   onConditionalApprove,
 }) {
   const finished = ["aprobada", "aprobada_condicionada", "rechazada"].includes(
@@ -1900,7 +2710,9 @@ function ReviewDetailModal({
   return (
     <ModalShell title="Revisión manual" onClose={onClose}>
       <div className="space-y-6">
-        <div className="grid sm:grid-cols-2 gap-3">
+        {/* INFORMACIÓN GENERAL */}
+
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
           <InfoBox
             label="Cliente"
             value={review.cliente?.nombre_completo || "—"}
@@ -1912,13 +2724,18 @@ function ReviewDetailModal({
           />
 
           <InfoBox
+            label="Monto financiable"
+            value={money(review.monto_financiable)}
+          />
+
+          <InfoBox
             label="Score crediticio"
-            value={`${review.puntaje_crediticio}/100`}
+            value={`${Number(review.puntaje_crediticio || 0).toFixed(0)}/100`}
           />
 
           <InfoBox
             label="Riesgo fraude"
-            value={`${review.puntaje_fraude}/100`}
+            value={`${Number(review.puntaje_fraude || 0).toFixed(0)}/100`}
           />
 
           <InfoBox
@@ -1927,7 +2744,19 @@ function ReviewDetailModal({
           />
 
           <InfoBox label="Estado" value={titleCase(review.estado_revision)} />
+
+          <InfoBox
+            label="Enganche"
+            value={`${Number(review.porcentaje_enganche || 0).toFixed(2)}%`}
+          />
+
+          <InfoBox
+            label="Cuotas permitidas"
+            value={review.numero_cuotas_permitidas ?? "—"}
+          />
         </div>
+
+        {/* MOTIVO */}
 
         <div className="p-4 bg-amber-50 border border-amber-100 rounded-xl">
           <p className="text-xs font-bold uppercase text-amber-700">
@@ -1980,9 +2809,32 @@ function ReviewDetailModal({
                   review.perfil_riesgo.porcentaje_puntualidad || 0,
                 ).toFixed(1)}%`}
               />
+
+              <InfoBox
+                label="Score perfil"
+                value={`${Number(
+                  review.perfil_riesgo.puntaje_crediticio || 0,
+                ).toFixed(0)}/100`}
+              />
+
+              <InfoBox
+                label="Fraude histórico"
+                value={`${Number(
+                  review.perfil_riesgo.puntaje_fraude || 0,
+                ).toFixed(0)}/100`}
+              />
+
+              <InfoBox
+                label="Nivel"
+                value={titleCase(review.perfil_riesgo.nivel_riesgo)}
+              />
             </div>
           </div>
         )}
+
+        {/* NUEVO: CONTEXTO DE COMPRA */}
+
+        <PurchaseContextPanel context={review.contexto_compra} />
 
         {/* SEÑALES */}
 
@@ -1995,6 +2847,45 @@ function ReviewDetailModal({
             <SignalsList signals={review.senales} />
           </div>
         )}
+
+        {/* ALERTAS ASOCIADAS */}
+
+        {review.alertas?.length > 0 && (
+          <div>
+            <h3 className="font-bold text-slate-900 mb-3">
+              Alertas relacionadas
+            </h3>
+
+            <div className="space-y-2">
+              {review.alertas.map((alert) => (
+                <div
+                  key={alert.id}
+                  className="rounded-xl border border-rose-200 bg-rose-50 p-3"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="font-semibold text-sm text-rose-900">
+                      {alert.titulo}
+                    </p>
+
+                    <span
+                      className={`px-2 py-1 rounded-full text-xs font-bold ${getSeverityClasses(
+                        alert.severidad,
+                      )}`}
+                    >
+                      {titleCase(alert.severidad)}
+                    </span>
+                  </div>
+
+                  <p className="text-xs text-rose-700 mt-2">
+                    {alert.descripcion}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* COMENTARIO */}
 
         {!finished && (
           <div>
@@ -2011,6 +2902,8 @@ function ReviewDetailModal({
             />
           </div>
         )}
+
+        {/* ACCIONES */}
 
         {!finished && (
           <div className="space-y-2">
@@ -2099,8 +2992,11 @@ function ReviewDetailModal({
                   className="mt-1 w-full border rounded-xl p-3 bg-white"
                 >
                   <option value={1}>1 cuota</option>
+
                   <option value={4}>4 cuotas</option>
+
                   <option value={12}>12 cuotas</option>
+
                   <option value={24}>24 cuotas</option>
                 </select>
               </div>
@@ -2130,6 +3026,8 @@ function ReviewDetailModal({
             </button>
           </div>
         )}
+
+        {/* FINALIZADA */}
 
         {finished && (
           <div className="p-4 rounded-xl bg-slate-50 border border-slate-200">
@@ -2161,54 +3059,81 @@ function ReviewDetailModal({
 
 function SignalsList({ signals }) {
   return (
-    <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-      {signals.map((signal, index) => (
-        <div
-          key={signal.id || `${signal.codigo}-${index}`}
-          className="border border-slate-200 rounded-xl p-3"
-        >
-          <div className="flex justify-between gap-3">
-            <div>
-              <p className="font-semibold text-sm text-slate-800">
-                {signal.nombre}
-              </p>
+    <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+      {signals.map((signal, index) => {
+        const isAmountPattern = signal.codigo === "MONTO_FUERA_DE_PATRON";
 
-              {signal.codigo && (
-                <p className="text-[10px] text-slate-400 mt-0.5">
-                  {signal.codigo}
+        const isDevice = signal.codigo === "DISPOSITIVO_NUEVO";
+
+        const isIp = signal.codigo === "IP_NUEVA";
+
+        const isLocation = [
+          "UBICACION_NUEVA",
+          "UBICACION_INCONSISTENTE",
+        ].includes(signal.codigo);
+
+        return (
+          <div
+            key={signal.id || `${signal.codigo}-${index}`}
+            className={`border rounded-xl p-3 ${
+              isAmountPattern
+                ? "border-rose-200 bg-rose-50"
+                : isDevice || isIp || isLocation
+                  ? "border-amber-200 bg-amber-50/50"
+                  : "border-slate-200 bg-white"
+            }`}
+          >
+            <div className="flex justify-between gap-3">
+              <div>
+                <p className="font-semibold text-sm text-slate-800">
+                  {signal.nombre}
                 </p>
-              )}
+
+                {signal.codigo && (
+                  <p className="text-[10px] text-slate-400 mt-0.5">
+                    {signal.codigo}
+                  </p>
+                )}
+              </div>
+
+              <span
+                className={`px-2 py-0.5 rounded-full text-xs font-bold h-fit ${getSeverityClasses(
+                  signal.severidad,
+                )}`}
+              >
+                {titleCase(signal.severidad)}
+              </span>
             </div>
 
-            <span
-              className={`px-2 py-0.5 rounded-full text-xs font-bold h-fit ${getSeverityClasses(
-                signal.severidad,
-              )}`}
-            >
-              {titleCase(signal.severidad)}
-            </span>
+            {signal.valor_texto && (
+              <p className="text-xs font-semibold text-slate-600 mt-2">
+                {signal.valor_texto}
+              </p>
+            )}
+
+            {signal.descripcion && (
+              <p className="text-xs text-slate-500 mt-2">
+                {signal.descripcion}
+              </p>
+            )}
+
+            {signal.impacto !== undefined && signal.impacto !== null && (
+              <p
+                className={`text-xs font-bold mt-2 ${
+                  Number(signal.impacto) < 0
+                    ? "text-rose-600"
+                    : Number(signal.impacto) > 0
+                      ? "text-orange-600"
+                      : "text-slate-400"
+                }`}
+              >
+                Impacto en evaluación: {Number(signal.impacto) > 0 ? "+" : ""}
+                {Number(signal.impacto)}
+              </p>
+            )}
           </div>
-
-          {signal.descripcion && (
-            <p className="text-xs text-slate-500 mt-2">{signal.descripcion}</p>
-          )}
-
-          {signal.impacto !== undefined && signal.impacto !== null && (
-            <p
-              className={`text-xs font-bold mt-2 ${
-                Number(signal.impacto) < 0
-                  ? "text-rose-600"
-                  : Number(signal.impacto) > 0
-                    ? "text-emerald-600"
-                    : "text-slate-400"
-              }`}
-            >
-              Impacto: {Number(signal.impacto) > 0 ? "+" : ""}
-              {Number(signal.impacto)}
-            </p>
-          )}
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -2256,7 +3181,7 @@ function Pagination({ page, pages, setPage }) {
 function ModalShell({ title, onClose, children }) {
   return (
     <div className="fixed inset-0 z-[150] bg-slate-950/60 backdrop-blur-sm p-4 flex items-center justify-center">
-      <div className="w-full max-w-4xl max-h-[92vh] overflow-hidden bg-white rounded-3xl shadow-2xl flex flex-col">
+      <div className="w-full max-w-5xl max-h-[92vh] overflow-hidden bg-white rounded-3xl shadow-2xl flex flex-col">
         <div className="p-5 border-b flex items-center justify-between">
           <h2 className="font-bold text-xl text-slate-900">{title}</h2>
 

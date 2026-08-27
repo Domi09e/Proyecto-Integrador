@@ -16,6 +16,7 @@ const {
   PerfilRiesgoCliente,
   Notificacion,
   HistorialLimiteCredito,
+  HistorialContextoCompra,
   sequelize,
 } = db;
 
@@ -128,6 +129,138 @@ const construirSenal = (senal) => ({
 
   descripcion: senal.descripcion,
 });
+
+/* =====================================================
+   CONTEXTO HISTÓRICO DE COMPRA
+===================================================== */
+
+const construirContextoCompra = (contexto) => {
+  if (!contexto) {
+    return null;
+  }
+
+  return {
+    id: contexto.id,
+
+    cliente_id: contexto.cliente_id,
+
+    evaluacion_id: contexto.evaluacion_id,
+
+    orden_id: contexto.orden_id,
+
+    session_id: contexto.session_id,
+
+    monto_actual: numeroSeguro(contexto.monto),
+
+    /* =========================
+       HISTORIAL DE MONTOS
+    ========================= */
+
+    cantidad_compras_historial: Number(
+      contexto.cantidad_compras_historial || 0,
+    ),
+
+    promedio_monto_historico:
+      contexto.promedio_monto_historico !== null &&
+      contexto.promedio_monto_historico !== undefined
+        ? numeroSeguro(contexto.promedio_monto_historico)
+        : null,
+
+    monto_minimo_historico:
+      contexto.monto_minimo_historico !== null &&
+      contexto.monto_minimo_historico !== undefined
+        ? numeroSeguro(contexto.monto_minimo_historico)
+        : null,
+
+    monto_maximo_historico:
+      contexto.monto_maximo_historico !== null &&
+      contexto.monto_maximo_historico !== undefined
+        ? numeroSeguro(contexto.monto_maximo_historico)
+        : null,
+
+    porcentaje_variacion_monto:
+      contexto.porcentaje_variacion_monto !== null &&
+      contexto.porcentaje_variacion_monto !== undefined
+        ? numeroSeguro(contexto.porcentaje_variacion_monto)
+        : null,
+
+    monto_fuera_patron: Boolean(contexto.monto_fuera_patron),
+
+    /* =========================
+       DISPOSITIVO
+    ========================= */
+
+    dispositivo_id: contexto.dispositivo_id || null,
+
+    dispositivo_hash: contexto.dispositivo_hash || null,
+
+    dispositivo_nuevo: Boolean(contexto.dispositivo_nuevo),
+
+    user_agent: contexto.user_agent || null,
+
+    /* =========================
+       RED
+    ========================= */
+
+    ip: contexto.ip || null,
+
+    ip_hash: contexto.ip_hash || null,
+
+    ip_nueva: Boolean(contexto.ip_nueva),
+
+    /* =========================
+       UBICACIÓN
+    ========================= */
+
+    ciudad: contexto.ciudad || null,
+
+    region: contexto.region || null,
+
+    pais: contexto.pais || null,
+
+    latitud:
+      contexto.latitud !== null && contexto.latitud !== undefined
+        ? numeroSeguro(contexto.latitud)
+        : null,
+
+    longitud:
+      contexto.longitud !== null && contexto.longitud !== undefined
+        ? numeroSeguro(contexto.longitud)
+        : null,
+
+    precision_ubicacion:
+      contexto.precision_ubicacion !== null &&
+      contexto.precision_ubicacion !== undefined
+        ? numeroSeguro(contexto.precision_ubicacion)
+        : null,
+
+    ubicacion_nueva: Boolean(contexto.ubicacion_nueva),
+
+    ubicacion_inconsistente: Boolean(contexto.ubicacion_inconsistente),
+
+    distancia_ubicacion_anterior_km:
+      contexto.distancia_ubicacion_anterior_km !== null &&
+      contexto.distancia_ubicacion_anterior_km !== undefined
+        ? numeroSeguro(contexto.distancia_ubicacion_anterior_km)
+        : null,
+
+    /* =========================
+       TRAZABILIDAD
+    ========================= */
+
+    decision: contexto.decision || null,
+
+    estado_operacion: contexto.estado_operacion || null,
+
+    es_referencia_comportamiento: Boolean(
+      contexto.es_referencia_comportamiento,
+    ),
+
+    created_at: contexto.created_at,
+
+    updated_at: contexto.updated_at,
+  };
+};
 
 /* =====================================================
    RESUMEN DEL CENTRO DE RIESGO
@@ -520,6 +653,14 @@ export const getRiskAlertDetail = async (req, res) => {
 
               required: false,
             },
+
+            {
+              model: HistorialContextoCompra,
+
+              as: "contexto_compra",
+
+              required: false,
+            },
           ],
 
           required: false,
@@ -629,6 +770,10 @@ export const getRiskAlertDetail = async (req, res) => {
               ip_hash: alerta.evaluacion.ip_hash,
 
               dispositivo_hash: alerta.evaluacion.dispositivo_hash,
+
+              contexto_compra: construirContextoCompra(
+                alerta.evaluacion.contexto_compra,
+              ),
 
               senales: (alerta.evaluacion.senales || []).map(construirSenal),
             }
@@ -1298,6 +1443,14 @@ export const getManualRiskReviewDetail = async (req, res) => {
 
           required: false,
         },
+
+        {
+          model: HistorialContextoCompra,
+
+          as: "contexto_compra",
+
+          required: false,
+        },
       ],
     });
 
@@ -1382,6 +1535,8 @@ export const getManualRiskReviewDetail = async (req, res) => {
         fecha_evaluacion: evaluacion.fecha_evaluacion,
 
         usuario_revision: construirUsuarioRevision(evaluacion.usuario_revision),
+
+        contexto_compra: construirContextoCompra(evaluacion.contexto_compra),
 
         senales: (evaluacion.senales || []).map(construirSenal),
 
@@ -2047,10 +2202,13 @@ export const getClientCreditLine = async (req, res) => {
     if (!clienteId) {
       return res.status(400).json({
         success: false,
-
         message: "Cliente inválido.",
       });
     }
+
+    /* =====================================================
+       LÍNEA DE CRÉDITO ACTUAL
+    ===================================================== */
 
     const resultado = await sincronizarLineaCreditoCliente(clienteId);
 
@@ -2059,6 +2217,10 @@ export const getClientCreditLine = async (req, res) => {
         cliente_id: clienteId,
       },
     });
+
+    /* =====================================================
+       HISTORIAL DE AJUSTES DE LÍMITE
+    ===================================================== */
 
     let historial = [];
 
@@ -2071,7 +2233,6 @@ export const getClientCreditLine = async (req, res) => {
         include: [
           {
             model: Usuario,
-
             as: "administrador",
 
             attributes: ["id", "nombre", "apellido", "email"],
@@ -2085,6 +2246,68 @@ export const getClientCreditLine = async (req, res) => {
         limit: 20,
       });
     }
+
+    /* =====================================================
+       HISTORIAL DE COMPORTAMIENTO DEL CLIENTE
+
+       IMPORTANTE:
+       Solo utilizamos compras formalizadas y marcadas
+       como referencias confiables.
+
+       De esta forma una compra rechazada, bloqueada o
+       enviada a revisión manual NO contamina el patrón.
+    ===================================================== */
+
+    let historialComportamiento = [];
+
+    if (HistorialContextoCompra) {
+      const registrosContexto = await HistorialContextoCompra.findAll({
+        where: {
+          cliente_id: clienteId,
+
+          es_referencia_comportamiento: true,
+
+          estado_operacion: "formalizada",
+        },
+
+        order: [
+          ["created_at", "DESC"],
+          ["id", "DESC"],
+        ],
+
+        limit: 20,
+      });
+
+      historialComportamiento = registrosContexto.map((registro) =>
+        construirContextoCompra(registro),
+      );
+    }
+
+    /* =====================================================
+       ESTADÍSTICAS DEL HISTORIAL
+    ===================================================== */
+
+    const montosHistoricos = historialComportamiento
+      .map((registro) => Number(registro.monto_actual))
+      .filter((monto) => Number.isFinite(monto) && monto > 0);
+
+    const cantidadComprasHistoricas = montosHistoricos.length;
+
+    const promedioHistorico =
+      cantidadComprasHistoricas > 0
+        ? montosHistoricos.reduce((total, monto) => total + monto, 0) /
+          cantidadComprasHistoricas
+        : 0;
+
+    const montoMinimoHistorico =
+      cantidadComprasHistoricas > 0 ? Math.min(...montosHistoricos) : 0;
+
+    const montoMaximoHistorico =
+      cantidadComprasHistoricas > 0 ? Math.max(...montosHistoricos) : 0;
+
+    /* =====================================================
+       LÍNEA DE CRÉDITO
+    ===================================================== */
 
     const limiteAprobado = numeroSeguro(resultado.limite_credito_aprobado);
 
@@ -2116,7 +2339,27 @@ export const getClientCreditLine = async (req, res) => {
         fecha_ultimo_ajuste: resultado.cliente.fecha_ultimo_ajuste_credito,
 
         motivo_ultimo_ajuste: resultado.cliente.motivo_ultimo_ajuste_credito,
+
+        /* =============================================
+           NUEVO: HISTORIAL DE COMPORTAMIENTO
+        ============================================= */
+
+        historial_comportamiento: historialComportamiento,
+
+        resumen_comportamiento: {
+          cantidad_compras: cantidadComprasHistoricas,
+
+          promedio_monto: Number(promedioHistorico.toFixed(2)),
+
+          monto_minimo: Number(montoMinimoHistorico.toFixed(2)),
+
+          monto_maximo: Number(montoMaximoHistorico.toFixed(2)),
+
+          tiene_patron_suficiente: cantidadComprasHistoricas >= 3,
+        },
       },
+
+      /* Historial administrativo de límites */
 
       historial,
     });

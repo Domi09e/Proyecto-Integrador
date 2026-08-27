@@ -669,6 +669,33 @@ const analizarSenalesFraude = ({ perfil, contexto, montoSolicitado }) => {
     contexto.ubicacion_inconsistente,
   );
 
+  const montoFueraPatron = normalizarBooleano(contexto.monto_fuera_patron);
+
+  const promedioMontoHistorico = Number(contexto.promedio_monto_historico) || 0;
+
+  const montoMinimoHistorico = Number(contexto.monto_minimo_historico) || 0;
+
+  const montoMaximoHistorico = Number(contexto.monto_maximo_historico) || 0;
+
+  const cantidadComprasHistorial =
+    Number(contexto.cantidad_compras_historial) || 0;
+
+  const porcentajeVariacionMonto =
+    Number(contexto.porcentaje_variacion_monto) || 0;
+
+  const factorPromedio = Number(contexto.factor_promedio) || 0;
+
+  const factorMaximo = Number(contexto.factor_maximo) || 0;
+
+  const distanciaUbicacionAnteriorKm =
+    Number(contexto.distancia_ubicacion_anterior_km) || 0;
+
+  const ciudadActual = contexto.ciudad || null;
+
+  const regionActual = contexto.region || null;
+
+  const paisActual = contexto.pais || null;
+
   const multiplesIntentos = Number(contexto.intentos_recientes) || 0;
 
   const comprasUltimosMinutos =
@@ -964,7 +991,11 @@ const analizarSenalesFraude = ({ perfil, contexto, montoSolicitado }) => {
   const promedioCompra =
     comprasUltimos30Dias > 0 ? montoUltimos30Dias / comprasUltimos30Dias : 0;
 
-  if (promedioCompra > 0 && montoSolicitado > promedioCompra * 3) {
+  if (
+    !montoFueraPatron &&
+    promedioCompra > 0 &&
+    montoSolicitado > promedioCompra * 3
+  ) {
     puntajeFraude += 15;
 
     senales.push(
@@ -1019,6 +1050,227 @@ const analizarSenalesFraude = ({ perfil, contexto, montoSolicitado }) => {
 
         descripcion:
           "La transacción presenta simultáneamente dispositivo, dirección IP y ubicación no reconocidos.",
+      }),
+    );
+  }
+
+  /* =====================================================
+   DISPOSITIVO NUEVO
+===================================================== */
+
+  if (dispositivoNuevo) {
+    puntajeFraude += 15;
+
+    senales.push(
+      crearSenal({
+        categoria: "dispositivo",
+
+        codigo: "DISPOSITIVO_NUEVO",
+
+        nombre: "Dispositivo no reconocido",
+
+        valorBooleano: true,
+
+        valorTexto:
+          contexto.dispositivo_id ||
+          "Identificador de dispositivo diferente al historial",
+
+        peso: 1,
+
+        impacto: 15,
+
+        severidad: "alta",
+
+        activada: true,
+
+        descripcion:
+          "La compra fue realizada desde un dispositivo que no aparece en el historial confiable del cliente.",
+      }),
+    );
+  }
+
+  /* =====================================================
+   IP NUEVA
+===================================================== */
+
+  if (ipNueva) {
+    puntajeFraude += 8;
+
+    senales.push(
+      crearSenal({
+        categoria: "red",
+
+        codigo: "IP_NUEVA",
+
+        nombre: "Dirección IP no reconocida",
+
+        valorBooleano: true,
+
+        valorTexto:
+          contexto.ip || "IP diferente a las utilizadas anteriormente",
+
+        peso: 0.6,
+
+        impacto: 8,
+
+        severidad: "media",
+
+        activada: true,
+
+        descripcion:
+          "La operación fue realizada desde una dirección IP que no aparece en el historial confiable del cliente.",
+      }),
+    );
+  }
+
+  /* =====================================================
+   UBICACIÓN NUEVA
+===================================================== */
+
+  if (ubicacionNueva) {
+    puntajeFraude += 15;
+
+    const ubicacionTexto = [ciudadActual, regionActual, paisActual]
+      .filter(Boolean)
+      .join(", ");
+
+    senales.push(
+      crearSenal({
+        categoria: "ubicacion",
+
+        codigo: "UBICACION_NUEVA",
+
+        nombre: "Ubicación diferente al historial",
+
+        valorBooleano: true,
+
+        valorNumerico:
+          distanciaUbicacionAnteriorKm > 0
+            ? distanciaUbicacionAnteriorKm
+            : null,
+
+        valorTexto:
+          ubicacionTexto ||
+          "Ubicación distinta a las registradas anteriormente",
+
+        peso: 1,
+
+        impacto: 15,
+
+        severidad: "alta",
+
+        activada: true,
+
+        descripcion:
+          distanciaUbicacionAnteriorKm > 0
+            ? `La operación fue realizada aproximadamente a ${distanciaUbicacionAnteriorKm.toFixed(
+                2,
+              )} km de la ubicación anterior registrada.`
+            : "La ubicación actual no coincide con las ubicaciones habituales registradas para el cliente.",
+      }),
+    );
+  }
+
+  /* =====================================================
+   CAMBIO GEOGRÁFICO INCONSISTENTE
+===================================================== */
+
+  if (ubicacionInconsistente) {
+    puntajeFraude += 20;
+
+    senales.push(
+      crearSenal({
+        categoria: "ubicacion",
+
+        codigo: "UBICACION_INCONSISTENTE",
+
+        nombre: "Cambio geográfico inusual",
+
+        valorBooleano: true,
+
+        valorNumerico:
+          distanciaUbicacionAnteriorKm > 0
+            ? distanciaUbicacionAnteriorKm
+            : null,
+
+        peso: 1.4,
+
+        impacto: 20,
+
+        severidad: "alta",
+
+        activada: true,
+
+        descripcion:
+          distanciaUbicacionAnteriorKm > 0
+            ? `Se detectó un cambio geográfico de aproximadamente ${distanciaUbicacionAnteriorKm.toFixed(
+                2,
+              )} km respecto a la ubicación anterior.`
+            : "Se detectó un cambio de ubicación considerado inconsistente con el comportamiento reciente del cliente.",
+      }),
+    );
+  }
+
+  /* =====================================================
+   MONTO FUERA DEL PATRÓN HISTÓRICO
+===================================================== */
+
+  if (montoFueraPatron && cantidadComprasHistorial >= 3) {
+    let impactoMonto = 18;
+    let severidadMonto = "alta";
+
+    /*
+     * Casos extremadamente fuera del patrón.
+     *
+     * Ejemplo:
+     * promedio: 7,000
+     * nueva compra: 45,000
+     */
+    if (factorPromedio >= 5 || factorMaximo >= 4) {
+      impactoMonto = 25;
+      severidadMonto = "critica";
+    }
+
+    puntajeFraude += impactoMonto;
+
+    const descripcionMonto =
+      `El cliente registra ${cantidadComprasHistorial} compras confiables ` +
+      `con un promedio aproximado de RD$ ${promedioMontoHistorico.toFixed(2)}, ` +
+      `un mínimo de RD$ ${montoMinimoHistorico.toFixed(2)} y un máximo de ` +
+      `RD$ ${montoMaximoHistorico.toFixed(2)}. La compra actual es de ` +
+      `RD$ ${Number(montoSolicitado).toFixed(2)}, equivalente a ` +
+      `${factorPromedio.toFixed(2)} veces su promedio histórico ` +
+      `(${porcentajeVariacionMonto >= 0 ? "+" : ""}${porcentajeVariacionMonto.toFixed(
+        2,
+      )} %).`;
+
+    senales.push(
+      crearSenal({
+        categoria: "comportamiento",
+
+        codigo: "MONTO_FUERA_DE_PATRON",
+
+        nombre: "Monto fuera del patrón habitual",
+
+        valorNumerico: Number(montoSolicitado),
+
+        valorTexto: `Promedio: RD$ ${promedioMontoHistorico.toFixed(
+          2,
+        )} | Rango: RD$ ${montoMinimoHistorico.toFixed(
+          2,
+        )} - RD$ ${montoMaximoHistorico.toFixed(2)} | Variación: ${
+          porcentajeVariacionMonto >= 0 ? "+" : ""
+        }${porcentajeVariacionMonto.toFixed(2)} %`,
+
+        peso: 1.5,
+
+        impacto: impactoMonto,
+
+        severidad: severidadMonto,
+
+        activada: true,
+
+        descripcion: descripcionMonto,
       }),
     );
   }

@@ -9,6 +9,12 @@ import { recalcularPerfilRiesgoCliente } from "../services/risk-profile.service.
 
 import { sincronizarLineaCreditoCliente } from "../services/credit-line.service.js";
 
+import {
+  analizarContextoCompra,
+  registrarContextoCompra,
+  marcarContextoComoFormalizado,
+} from "../services/purchase-context.service.js";
+
 const {
   Cliente,
   Tienda,
@@ -168,10 +174,13 @@ export const bnplCheckout = async (req, res) => {
       dispositivo_id,
       session_id,
 
-      dispositivo_nuevo = false,
-      ip_nueva = false,
-      ubicacion_nueva = false,
-      ubicacion_inconsistente = false,
+      latitud = null,
+      longitud = null,
+      precision_ubicacion = null,
+
+      ciudad = null,
+      region = null,
+      pais = null,
 
       intentos_recientes = 0,
       compras_ultimos_10_minutos = 0,
@@ -347,6 +356,62 @@ export const bnplCheckout = async (req, res) => {
 
     const numeroCuotasSolicitadas = MAPA_CUOTAS[preferencia] || 4;
 
+    /* =====================================================
+   ANALIZAR CONTEXTO HISTÓRICO DE LA COMPRA
+===================================================== */
+
+    const analisisContexto = await analizarContextoCompra({
+      clienteId: cliente.id,
+
+      monto: montoSolicitado,
+
+      dispositivoId: dispositivo_id || null,
+
+      ip: obtenerIpCliente(req),
+
+      userAgent: req.headers["user-agent"] || null,
+
+      latitud,
+
+      longitud,
+
+      precisionUbicacion: precision_ubicacion,
+
+      ciudad,
+
+      region,
+
+      pais,
+
+      sessionId: session_id || null,
+
+      transaction,
+    });
+
+    console.log("ANÁLISIS CONTEXTO COMPRA:", {
+      cliente: cliente.id,
+
+      monto: montoSolicitado,
+
+      dispositivo_nuevo: analisisContexto.dispositivo_nuevo,
+
+      ip_nueva: analisisContexto.ip_nueva,
+
+      ubicacion_nueva: analisisContexto.ubicacion_nueva,
+
+      ubicacion_inconsistente: analisisContexto.ubicacion_inconsistente,
+
+      monto_fuera_patron: analisisContexto.monto_fuera_patron,
+
+      promedio: analisisContexto.promedio_monto_historico,
+
+      minimo: analisisContexto.monto_minimo_historico,
+
+      maximo: analisisContexto.monto_maximo_historico,
+
+      variacion: analisisContexto.porcentaje_variacion_monto,
+    });
+
     /* ==============================
          MOTOR DINÁMICO
       ============================== */
@@ -361,21 +426,76 @@ export const bnplCheckout = async (req, res) => {
       numeroCuotasSolicitadas,
 
       contexto: {
-        ip: obtenerIpCliente(req),
+        /* ==============================
+       IDENTIDAD DE LA OPERACIÓN
+    ============================== */
 
-        user_agent: req.headers["user-agent"] || null,
+        ip: analisisContexto.ip,
 
-        dispositivo_id: dispositivo_id || null,
+        ip_hash: analisisContexto.ip_hash,
 
-        session_id: session_id || null,
+        user_agent: analisisContexto.user_agent,
 
-        dispositivo_nuevo,
+        dispositivo_id: analisisContexto.dispositivo_id,
 
-        ip_nueva,
+        dispositivo_hash: analisisContexto.dispositivo_hash,
 
-        ubicacion_nueva,
+        session_id: analisisContexto.session_id,
 
-        ubicacion_inconsistente,
+        /* ==============================
+       DETECCIÓN AUTOMÁTICA
+    ============================== */
+
+        dispositivo_nuevo: analisisContexto.dispositivo_nuevo,
+
+        ip_nueva: analisisContexto.ip_nueva,
+
+        ubicacion_nueva: analisisContexto.ubicacion_nueva,
+
+        ubicacion_inconsistente: analisisContexto.ubicacion_inconsistente,
+
+        /* ==============================
+       UBICACIÓN
+    ============================== */
+
+        latitud: analisisContexto.latitud,
+
+        longitud: analisisContexto.longitud,
+
+        precision_ubicacion: analisisContexto.precision_ubicacion,
+
+        ciudad: analisisContexto.ciudad,
+
+        region: analisisContexto.region,
+
+        pais: analisisContexto.pais,
+
+        distancia_ubicacion_anterior_km:
+          analisisContexto.distancia_ubicacion_anterior_km,
+
+        /* ==============================
+       COMPORTAMIENTO DE MONTO
+    ============================== */
+
+        monto_fuera_patron: analisisContexto.monto_fuera_patron,
+
+        promedio_monto_historico: analisisContexto.promedio_monto_historico,
+
+        monto_minimo_historico: analisisContexto.monto_minimo_historico,
+
+        monto_maximo_historico: analisisContexto.monto_maximo_historico,
+
+        cantidad_compras_historial: analisisContexto.cantidad_compras_historial,
+
+        porcentaje_variacion_monto: analisisContexto.porcentaje_variacion_monto,
+
+        factor_promedio: analisisContexto.factor_promedio,
+
+        factor_maximo: analisisContexto.factor_maximo,
+
+        /* ==============================
+       VELOCIDAD
+    ============================== */
 
         intentos_recientes: Number(intentos_recientes) || 0,
 
@@ -392,6 +512,41 @@ export const bnplCheckout = async (req, res) => {
     });
 
     const resultado = resultadoMotor.resultado;
+
+    /* =====================================================
+   REGISTRAR CONTEXTO DE ESTA EVALUACIÓN
+===================================================== */
+
+    let estadoContexto = "evaluada";
+
+    if (resultado.decision === DECISIONES.BLOQUEO_FRAUDE) {
+      estadoContexto = "bloqueada";
+    } else if (resultado.decision === DECISIONES.REVISION_MANUAL) {
+      estadoContexto = "revision_manual";
+    } else if (resultado.decision === DECISIONES.RECHAZO_CREDITICIO) {
+      estadoContexto = "rechazada";
+    }
+
+    await registrarContextoCompra({
+      analisis: analisisContexto,
+
+      evaluacionId: resultadoMotor.evaluacion_id,
+
+      ordenId: null,
+
+      decision: resultado.decision,
+
+      estadoOperacion: estadoContexto,
+
+      /*
+       * Todavía no la usamos para aprender.
+       * Primero debe convertirse realmente
+       * en una compra formalizada.
+       */
+      esReferenciaComportamiento: false,
+
+      transaction,
+    });
 
     /* ==============================
          FRAUDE
